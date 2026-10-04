@@ -17,11 +17,20 @@ interface PlannedDao {
     @Query("SELECT * FROM planned_reminder WHERE epochDay = :day ORDER BY minuteOfDay")
     fun forDay(day: Long): Flow<List<PlannedReminder>>
 
+    @Query("SELECT * FROM planned_reminder WHERE epochDay = :day ORDER BY minuteOfDay")
+    suspend fun forDayOnce(day: Long): List<PlannedReminder>
+
+    @Query("SELECT COUNT(*) FROM planned_reminder WHERE epochDay = :day")
+    fun countForDay(day: Long): Flow<Int>
+
     @Upsert
     suspend fun upsert(reminder: PlannedReminder): Long
 
     @Delete
     suspend fun delete(reminder: PlannedReminder)
+
+    @Query("DELETE FROM planned_reminder WHERE epochDay = :day")
+    suspend fun deleteDay(day: Long)
 }
 
 @Dao

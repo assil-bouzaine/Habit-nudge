@@ -1,6 +1,5 @@
 package me.habitnudge.ui
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -13,10 +12,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 
 enum class Tab(val label: String, val icon: ImageVector) {
     PLAN("Plan", Icons.Filled.DateRange),
@@ -25,7 +22,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun AppRoot(tab: Tab, onTab: (Tab) -> Unit) {
+fun AppRoot(tab: Tab, onTab: (Tab) -> Unit, planDay: Long, onPlanDay: (Long) -> Unit) {
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -42,10 +39,7 @@ fun AppRoot(tab: Tab, onTab: (Tab) -> Unit) {
     ) { padding ->
         val content = Modifier.fillMaxSize().padding(padding)
         when (tab) {
-            // The planner arrives in step 5.
-            Tab.PLAN -> Box(content.padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("Tomorrow's plan arrives in the next update.")
-            }
+            Tab.PLAN -> PlanScreen(planDay, onPlanDay, content)
             Tab.RECURRING -> RecurringScreen(content)
             Tab.SETUP -> HealthScreen(content)
         }

@@ -14,6 +14,8 @@ New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
 function Invoke-Build {
     Push-Location $proj
     [Environment]::CurrentDirectory = $proj
+    # Gradle writes progress to stderr; under 'Stop', PowerShell 5.1 would treat that as a fatal error.
+    $ErrorActionPreference = 'Continue'
     try { & (Join-Path $proj 'gradlew.bat') assembleRelease --console=plain *> $log } finally { Pop-Location }
     return $LASTEXITCODE
 }

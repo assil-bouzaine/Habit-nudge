@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
@@ -15,9 +16,12 @@ import me.habitnudge.notify.Notifier
 import me.habitnudge.schedule.Engine
 import me.habitnudge.ui.AppRoot
 import me.habitnudge.ui.Tab
+import me.habitnudge.ui.defaultPlanDay
+import me.habitnudge.ui.today
 
 class MainActivity : ComponentActivity() {
-    private var tab by mutableStateOf(Tab.RECURRING)
+    private var tab by mutableStateOf(Tab.PLAN)
+    private var planDay by mutableLongStateOf(defaultPlanDay())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,7 +33,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             MaterialTheme {
-                AppRoot(tab = tab, onTab = { tab = it })
+                AppRoot(tab = tab, onTab = { tab = it }, planDay = planDay, onPlanDay = { planDay = it })
             }
         }
     }
@@ -41,6 +45,9 @@ class MainActivity : ComponentActivity() {
 
     /** The evening "plan tomorrow" reminder opens straight into the planner. */
     private fun handleIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra(Notifier.EXTRA_OPEN_PLANNER, false) == true) tab = Tab.PLAN
+        if (intent?.getBooleanExtra(Notifier.EXTRA_OPEN_PLANNER, false) == true) {
+            tab = Tab.PLAN
+            planDay = today() + 1
+        }
     }
 }
