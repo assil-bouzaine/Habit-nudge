@@ -34,6 +34,25 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("seeded", false)
         set(v) = sp.edit(commit = true) { putBoolean("seeded", v) }
 
+    /** Default nudge messages were created (separate flag: added after the first release). */
+    var seededNudge: Boolean
+        get() = sp.getBoolean("seededNudge", false)
+        set(v) = sp.edit(commit = true) { putBoolean("seededNudge", v) }
+
+    /** How long the nudge card (or notification) stays before fading. */
+    var nudgeSeconds: Int
+        get() = sp.getInt("nudgeSeconds", 6)
+        set(v) = sp.edit { putInt("nudgeSeconds", v) }
+
+    var nudgeGetMeOut: Boolean
+        get() = sp.getBoolean("nudgeGetMeOut", true)
+        set(v) = sp.edit { putBoolean("nudgeGetMeOut", v) }
+
+    /** Rotates through the nudge messages. */
+    var nudgeMessageIndex: Int
+        get() = sp.getInt("nudgeMessageIndex", 0)
+        set(v) = sp.edit { putInt("nudgeMessageIndex", v) }
+
     /** Settings the app can't read back, confirmed by hand on the health screen. */
     fun isConfirmed(key: String): Boolean = sp.getBoolean("confirmed_$key", false)
     fun setConfirmed(key: String, value: Boolean) = sp.edit { putBoolean("confirmed_$key", value) }

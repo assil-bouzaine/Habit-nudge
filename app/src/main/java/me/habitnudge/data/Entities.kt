@@ -47,6 +47,26 @@ data class RecurringRule(
         else (startMinute..endMinute step intervalMin).toList()
 }
 
+enum class NudgeStyle { CARD, NOTIFICATION }
+
+/** An app that gets a gentle nudge when opened. */
+@Entity(tableName = "nudge_app")
+data class NudgeApp(
+    @PrimaryKey val packageName: String,
+    val label: String,
+    val enabled: Boolean = true,
+    val style: NudgeStyle = NudgeStyle.CARD,
+    /** While you stay in the app, a "Still here?" check-in every this many minutes; 0 = never. */
+    val checkInMin: Int = 15,
+)
+
+/** A nudge message; "{app}" is replaced with the app's name. Shown in rotation. */
+@Entity(tableName = "nudge_message")
+data class NudgeMessage(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val text: String,
+)
+
 /** A fired Sticky/Nagging/Takeover reminder that is waiting for Done. */
 @Entity(tableName = "active_alert", indices = [Index("occurrenceKey", unique = true)])
 data class ActiveAlert(

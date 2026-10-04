@@ -11,6 +11,7 @@ import android.provider.Settings
 import android.app.NotificationManager
 import me.habitnudge.app
 import me.habitnudge.notify.Notifier
+import me.habitnudge.nudge.NudgeService
 
 /** One thing the app depends on, with the settings screens that fix it (tried in order). */
 data class HealthItem(
@@ -89,6 +90,12 @@ object Health {
                 "Needed for Takeover cards on top of other apps.",
                 Settings.canDrawOverlays(context),
                 listOf(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri), appDetails),
+            ),
+            HealthItem(
+                "accessibility", "Nudge service (accessibility) on",
+                "Needed for app-open nudges. EMUI sometimes switches it off after the app is killed.",
+                NudgeService.isEnabled(context),
+                listOf(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
             ),
             HealthItem(
                 "battery", "Battery optimization off",

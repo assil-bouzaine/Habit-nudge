@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 enum class Tab(val label: String, val icon: ImageVector) {
     PLAN("Plan", Icons.Filled.DateRange),
     RECURRING("Recurring", Icons.Filled.Refresh),
+    NUDGE("Nudge", Icons.Filled.Face),
     SETUP("Setup", Icons.Filled.Settings),
 }
 
@@ -41,6 +43,7 @@ fun AppRoot(tab: Tab, onTab: (Tab) -> Unit, planDay: Long, onPlanDay: (Long) -> 
         when (tab) {
             Tab.PLAN -> PlanScreen(planDay, onPlanDay, content)
             Tab.RECURRING -> RecurringScreen(content)
+            Tab.NUDGE -> NudgeScreen(content)
             Tab.SETUP -> HealthScreen(content)
         }
     }

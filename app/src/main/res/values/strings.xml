@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Habit Nudge</string>
+    <string name="nudge_service_label">Habit Nudge app-open nudge</string>
+    <string name="nudge_service_description">Shows a gentle reminder when you open an app you chose in Habit Nudge. It only notices which app is in front and never reads what is on the screen. Nothing leaves the phone.</string>
 </resources>

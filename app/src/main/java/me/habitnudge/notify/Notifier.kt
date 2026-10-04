@@ -13,6 +13,7 @@ import me.habitnudge.MainActivity
 import me.habitnudge.R
 import me.habitnudge.data.ActiveAlert
 import me.habitnudge.data.Strictness
+import me.habitnudge.nudge.NudgeActionReceiver
 import me.habitnudge.schedule.DoneReceiver
 import me.habitnudge.schedule.Occurrence
 import me.habitnudge.takeover.TakeoverActivity
@@ -23,12 +24,14 @@ object Notifier {
     const val CH_STICKY = "sticky_v1"
     const val CH_NAG = "nag_v1"
     const val CH_TAKEOVER = "takeover_v1"
+    const val CH_NUDGE = "nudge_v1"
 
     const val EXTRA_OPEN_PLANNER = "openPlanner"
     const val EXTRA_ALERT_ID = "alertId"
 
     private const val TAG_GENTLE = "g"
     private const val TAG_ACTIVE = "a"
+    private const val TAG_NUDGE = "n"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -67,7 +70,51 @@ object Notifier {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             },
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_NUDGE, "App-open nudges", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Silent banner when you open a watched app (if set to notification style)"
+                setSound(null, null)
+                enableVibration(false)
+            },
+        )
     }
+
+    fun showNudge(context: Context, appLabel: String, message: String, seconds: Int, showGetMeOut: Boolean) {
+        val n = nudgeBuilder(context, appLabel, message, showGetMeOut)
+            .setTimeoutAfter(seconds.coerceAtLeast(1) * 1000L)
+            .build()
+        nm(context).notify(TAG_NUDGE, 0, n)
+    }
+
+    /** Periodic check-in while you stay in a watched app; removed when you leave it. */
+    fun showStillHere(context: Context, appLabel: String, minutes: Int, showGetMeOut: Boolean) {
+        val n = nudgeBuilder(
+            context, "Still here?",
+            "You've been in $appLabel for $minutes minutes. Is this still what you want to be doing?",
+            showGetMeOut,
+        ).build()
+        nm(context).notify(TAG_NUDGE, 1, n)
+    }
+
+    private fun nudgeBuilder(context: Context, title: String, message: String, showGetMeOut: Boolean) =
+        Notification.Builder(context, CH_NUDGE)
+            .setSmallIcon(R.drawable.ic_notif)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(Notification.BigTextStyle().bigText(message))
+            .setAutoCancel(true)
+            .apply {
+                if (showGetMeOut) {
+                    val out = PendingIntent.getBroadcast(
+                        context, 0, Intent(context, NudgeActionReceiver::class.java), PendingIntent.FLAG_IMMUTABLE,
+                    )
+                    addAction(Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notif), "Get me out", out).build())
+                }
+            }
+
+    fun cancelNudge(context: Context) = nm(context).cancel(TAG_NUDGE, 0)
+
+    fun cancelStillHere(context: Context) = nm(context).cancel(TAG_NUDGE, 1)
 
     fun showGentle(context: Context, o: Occurrence) {
         val n = Notification.Builder(context, CH_GENTLE)

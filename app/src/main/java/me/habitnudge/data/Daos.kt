@@ -49,6 +49,33 @@ interface RuleDao {
 }
 
 @Dao
+interface NudgeDao {
+    @Query("SELECT * FROM nudge_app ORDER BY label COLLATE NOCASE")
+    fun appsFlow(): Flow<List<NudgeApp>>
+
+    @Upsert
+    suspend fun upsertApp(app: NudgeApp)
+
+    @Upsert
+    suspend fun upsertApps(apps: List<NudgeApp>)
+
+    @Delete
+    suspend fun deleteApp(app: NudgeApp)
+
+    @Query("SELECT * FROM nudge_message ORDER BY id")
+    fun messagesFlow(): Flow<List<NudgeMessage>>
+
+    @Query("SELECT * FROM nudge_message ORDER BY id")
+    suspend fun messages(): List<NudgeMessage>
+
+    @Insert
+    suspend fun insertMessage(message: NudgeMessage)
+
+    @Delete
+    suspend fun deleteMessage(message: NudgeMessage)
+}
+
+@Dao
 interface AlertDao {
     @Query("SELECT * FROM active_alert")
     suspend fun all(): List<ActiveAlert>
