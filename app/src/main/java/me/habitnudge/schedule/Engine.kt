@@ -12,6 +12,7 @@ import me.habitnudge.app
 import me.habitnudge.data.ActiveAlert
 import me.habitnudge.data.DiagLog
 import me.habitnudge.nudge.NudgeService
+import me.habitnudge.nudge.Stats
 import me.habitnudge.data.Strictness
 import me.habitnudge.notify.Notifier
 import me.habitnudge.takeover.AlarmSound
@@ -54,6 +55,7 @@ object Engine {
     /** App opened: put back any notifications EMUI cleared, bring back a pending Takeover, and re-arm. */
     suspend fun onAppStart(context: Context) = mutex.withLock {
         context.app.db.planned().deleteBefore(LocalDate.now().toEpochDay() - KEEP_PLANNED_DAYS)
+        context.app.db.stats().deleteBefore(LocalDate.now().toEpochDay() - Stats.KEEP_DAYS)
         restoreActive(context)
         if (context.app.db.alerts().takeoverQueue().isNotEmpty() && !Takeover.inCall(context)) {
             Takeover.launch(context)

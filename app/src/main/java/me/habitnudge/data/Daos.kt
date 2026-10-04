@@ -88,6 +88,30 @@ interface NudgeDao {
 }
 
 @Dao
+interface StatsDao {
+    @Query("INSERT OR IGNORE INTO app_day_stat (day, packageName, opens, getOuts, stays, checkIns, foregroundMs) VALUES (:day, :pkg, 0, 0, 0, 0, 0)")
+    suspend fun ensure(day: Long, pkg: String)
+
+    @Query(
+        "UPDATE app_day_stat SET opens = opens + :opens, getOuts = getOuts + :getOuts, stays = stays + :stays, " +
+            "checkIns = checkIns + :checkIns, foregroundMs = foregroundMs + :ms WHERE day = :day AND packageName = :pkg",
+    )
+    suspend fun add(day: Long, pkg: String, opens: Int, getOuts: Int, stays: Int, checkIns: Int, ms: Long)
+
+    @Query("SELECT * FROM app_day_stat WHERE day >= :fromDay")
+    fun since(fromDay: Long): Flow<List<AppDayStat>>
+
+    /** Total watched-app time per day, for the streak. */
+    @Query("SELECT day, SUM(foregroundMs) AS totalMs FROM app_day_stat WHERE day >= :fromDay GROUP BY day")
+    suspend fun totalsSince(fromDay: Long): List<DayTotal>
+
+    @Query("DELETE FROM app_day_stat WHERE day < :day")
+    suspend fun deleteBefore(day: Long)
+}
+
+data class DayTotal(val day: Long, val totalMs: Long)
+
+@Dao
 interface AlertDao {
     @Query("SELECT * FROM active_alert")
     suspend fun all(): List<ActiveAlert>

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.ui.draw.alpha
@@ -222,6 +223,9 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
+
+        item { SectionLabel("Bedtime") }
+        item { BedtimeSettings(previewApp = apps.firstOrNull()) }
     }
 
     if (picking) {
@@ -246,6 +250,54 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
             onRemove = { app.scope.launch { dao.deleteApp(a) }; editing = null },
             onDismiss = { editing = null },
         )
+    }
+}
+
+/** Bedtime mode: strictest treatment for watched apps between two times. */
+@Composable
+private fun BedtimeSettings(previewApp: NudgeApp?) {
+    val context = LocalContext.current
+    val prefs = context.app.prefs
+    var enabled by remember { mutableStateOf(prefs.bedtimeEnabled) }
+    var start by remember { mutableIntStateOf(prefs.bedtimeStartMin) }
+    var end by remember { mutableIntStateOf(prefs.bedtimeEndMin) }
+    var checkIn by remember { mutableIntStateOf(prefs.bedtimeCheckInMin) }
+    var lock by remember { mutableIntStateOf(prefs.bedtimeStayLockSec) }
+
+    AppCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🌙", fontSize = 26.sp) // crescent moon
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Bedtime mode", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Full-screen card on open, check-ins as cards, and \"Stay anyway\" locked for a few seconds.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = { enabled = it; prefs.bedtimeEnabled = it })
+            }
+            if (enabled) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TimeButton("From", start) { start = it; prefs.bedtimeStartMin = it }
+                    Spacer(Modifier.width(8.dp))
+                    TimeButton("to", end) { end = it; prefs.bedtimeEndMin = it }
+                }
+                NumberField("Check in every (minutes)", checkIn, 1, 60) { checkIn = it; prefs.bedtimeCheckInMin = it }
+                NumberField("\"Stay anyway\" unlocks after (seconds)", lock, 0, 120) { lock = it; prefs.bedtimeStayLockSec = it }
+                FilledTonalButton(onClick = {
+                    val service = NudgeService.instance
+                    if (service == null) {
+                        Toast.makeText(context, "Turn on the nudge service first.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val label = previewApp?.label ?: "Instagram"
+                        service.showBedtime(label, previewApp?.packageName, "It's late. $label can wait. Your sleep can't.")
+                    }
+                }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Preview bedtime card") }
+            }
+        }
     }
 }
 

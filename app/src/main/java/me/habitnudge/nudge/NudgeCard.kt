@@ -85,6 +85,86 @@ class NudgeCard(private val service: AccessibilityService) {
         handler.postDelayed({ dismiss() }, durationMs)
     }
 
+    /**
+     * Bedtime variant: covers the whole screen (dark), never fades by itself, and "Stay anyway"
+     * only unlocks after [lockSec] seconds. "Get me out" works immediately.
+     */
+    fun showBedtime(time: String, message: String, lockSec: Int, icon: Drawable?) {
+        removeNow()
+        val ink = 0xFFE6EAF0.toInt()
+        val soft = 0xB3E6EAF0.toInt()
+        val accent = 0xFF1877F2.toInt()
+        val stay = pill("Stay anyway", 0x1FFFFFFF, soft, palette()) {
+            (service as? NudgeService)?.onStay()
+            dismiss()
+        }
+        val content = LinearLayout(service).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(32), dp(32), dp(32), dp(32))
+            addView(TextView(service).apply {
+                text = "🌙" // crescent moon
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 44f)
+            })
+            addView(TextView(service).apply {
+                text = time
+                setTextColor(soft)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 40f)
+                typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            }, marginTop(dp(12)))
+            if (icon != null) {
+                addView(ImageView(service).apply { setImageDrawable(icon) }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { topMargin = dp(20) })
+            }
+            addView(TextView(service).apply {
+                text = message
+                gravity = Gravity.CENTER
+                setTextColor(ink)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+                typeface = Typeface.DEFAULT_BOLD
+                setLineSpacing(0f, 1.2f)
+            }, marginTop(dp(20)))
+            addView(pill("Get me out", accent, 0xFFFFFFFF.toInt(), palette()) {
+                (service as? NudgeService)?.goHome() ?: dismiss()
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply { topMargin = dp(40) })
+            addView(stay, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12) })
+        }
+        val root = FrameLayout(service).apply {
+            setBackgroundColor(0xF20B1220.toInt())
+            addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            alpha = 0f
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        )
+        wm.addView(root, params)
+        view = root
+        root.animate().alpha(1f).setDuration(250).start()
+
+        // Countdown on "Stay anyway".
+        stay.isEnabled = false
+        stay.alpha = 0.5f
+        val unlockAt = System.currentTimeMillis() + lockSec * 1000L
+        val tick = object : Runnable {
+            override fun run() {
+                if (view !== root) return
+                val left = ((unlockAt - System.currentTimeMillis() + 999) / 1000).toInt()
+                if (left <= 0) {
+                    stay.text = "Stay anyway"
+                    stay.isEnabled = true
+                    stay.alpha = 1f
+                } else {
+                    stay.text = "Stay anyway ($left)"
+                    handler.postDelayed(this, 250)
+                }
+            }
+        }
+        tick.run()
+    }
+
     /** Fades out, then removes the card. [fast] is for when you've left the app. */
     fun dismiss(fast: Boolean = false) {
         handler.removeCallbacksAndMessages(null)
@@ -143,7 +223,7 @@ class NudgeCard(private val service: AccessibilityService) {
                     orientation = LinearLayout.HORIZONTAL
                     // Leaving is the bold, obvious choice; staying is the quiet one you have to mean.
                     if (showGetMeOut) {
-                        addView(pill("Stay anyway", p.tonal, p.accent, p) { dismiss() },
+                        addView(pill("Stay anyway", p.tonal, p.accent, p) { (service as? NudgeService)?.onStay(); dismiss() },
                             LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
                         addView(pill("Get me out", p.accent, p.onAccent, p) {
                             (service as? NudgeService)?.goHome() ?: dismiss()

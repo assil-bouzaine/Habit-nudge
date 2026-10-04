@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -29,6 +30,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
     PLAN("Plan", Icons.Filled.DateRange),
     RECURRING("Recurring", Icons.Filled.Refresh),
     NUDGE("Nudge", Icons.Filled.Face),
+    STATS("Stats", Icons.Filled.Star),
     SETUP("Setup", Icons.Filled.Settings),
 }
 
@@ -67,6 +69,7 @@ fun AppRoot(tab: Tab, onTab: (Tab) -> Unit, planDay: Long, onPlanDay: (Long) -> 
             Tab.PLAN -> PlanScreen(planDay, onPlanDay, content)
             Tab.RECURRING -> RecurringScreen(content)
             Tab.NUDGE -> NudgeScreen(content)
+            Tab.STATS -> StatsScreen(content)
             Tab.SETUP -> HealthScreen(content)
         }
     }

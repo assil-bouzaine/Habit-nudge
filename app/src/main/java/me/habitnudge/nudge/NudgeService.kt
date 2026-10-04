@@ -13,6 +13,8 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
+import java.text.DateFormat
+import java.util.Date
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,10 +52,15 @@ class NudgeService : AccessibilityService() {
         var leftAt: Long? = null
     }
 
+    /** Watched app currently in front, and since when, for time-spent stats. */
+    private var fgPkg: String? = null
+    private var fgSince = 0L
+
     private val screenOff = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             // Locking the phone ends the session; unlocking back into the app counts as opening it.
             current = null
+            trackForeground(null)
             endSession()
         }
     }
@@ -81,6 +88,7 @@ class NudgeService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (pkg == current || isTransient(pkg)) return
         current = pkg
+        trackForeground(pkg)
         val now = SystemClock.elapsedRealtime()
 
         val s = session
@@ -120,17 +128,38 @@ class NudgeService : AccessibilityService() {
         Notifier.cancelStillHere(this)
     }
 
-    /** Next check-in at the next multiple of the interval since the session started. */
+    /** Adds time spent in the previous watched app (if any) and starts timing [pkg] if it's watched. */
+    private fun trackForeground(pkg: String?) {
+        val now = SystemClock.elapsedRealtime()
+        fgPkg?.let { prev -> recordStat(prev, ms = now - fgSince) }
+        fgPkg = pkg?.takeIf { it in watched }
+        fgSince = now
+    }
+
+    /** Count time so far without waiting for you to leave (the Stats screen calls this so "today" is current). */
+    fun flushForeground() = trackForeground(fgPkg)
+
+    private fun recordStat(pkg: String, opens: Int = 0, getOuts: Int = 0, stays: Int = 0, checkIns: Int = 0, ms: Long = 0) {
+        app.scope.launch { Stats.record(app, pkg, opens, getOuts, stays, checkIns, ms) }
+    }
+
+    /** Next check-in at the next multiple of the interval since the session started; tighter at bedtime. */
     private fun scheduleCheckIn(s: Session, target: NudgeApp) {
         handler.removeCallbacksAndMessages(null)
-        val interval = target.checkInMin * 60_000L
+        val bedtime = Bedtime.isNow(app.prefs)
+        val interval = (if (bedtime) app.prefs.bedtimeCheckInMin else target.checkInMin) * 60_000L
         if (interval <= 0) return
         val elapsed = SystemClock.elapsedRealtime() - s.startedAt
         val delay = interval - (elapsed % interval)
         handler.postDelayed({
             if (session === s && s.leftAt == null && current == s.pkg) {
                 val minutes = ((SystemClock.elapsedRealtime() - s.startedAt) / 60_000L).toInt()
-                Notifier.showStillHere(this, target.label, minutes, app.prefs.nudgeGetMeOut)
+                recordStat(s.pkg, checkIns = 1)
+                if (Bedtime.isNow(app.prefs)) {
+                    showBedtime(target.label, target.packageName, "$minutes minutes in ${target.label}, at ${nowText()}. Go to sleep.")
+                } else {
+                    Notifier.showStillHere(this, target.label, minutes, app.prefs.nudgeGetMeOut)
+                }
                 watched[s.pkg]?.let { scheduleCheckIn(s, it) }
             }
         }, delay)
@@ -138,11 +167,30 @@ class NudgeService : AccessibilityService() {
 
     private fun nudge(target: NudgeApp) {
         val s = session
+        recordStat(target.packageName, opens = 1)
+        if (Bedtime.isNow(app.prefs)) {
+            showBedtime(target.label, target.packageName, Bedtime.message(app.prefs, target.label, nowText()))
+            return
+        }
         scope.launch {
             val message = Nudges.nextMessage(app, target.label)
             // Skip if you already left while the message was being picked.
             if (session === s && current == target.packageName) show(target.style, target.label, message, target.packageName)
         }
+    }
+
+    /** Full-screen bedtime card: no auto-fade; "Stay anyway" unlocks after a few seconds. */
+    fun showBedtime(label: String, pkg: String?, message: String) {
+        val icon = pkg?.let { runCatching { packageManager.getApplicationIcon(it) }.getOrNull() }
+        card.showBedtime(nowText(), message, app.prefs.bedtimeStayLockSec, icon)
+    }
+
+    private fun nowText(): String =
+        DateFormat.getTimeInstance(DateFormat.SHORT).format(Date())
+
+    /** "Stay anyway" tapped on a card. */
+    fun onStay() {
+        (session?.pkg ?: current)?.takeIf { it in watched }?.let { recordStat(it, stays = 1) }
     }
 
     /** [pkg] supplies the icon on the card; null shows a generic one. */
@@ -158,6 +206,7 @@ class NudgeService : AccessibilityService() {
     }
 
     fun goHome() {
+        (session?.pkg ?: current)?.takeIf { it in watched }?.let { recordStat(it, getOuts = 1) }
         card.dismiss()
         performGlobalAction(GLOBAL_ACTION_HOME)
     }
@@ -187,6 +236,7 @@ class NudgeService : AccessibilityService() {
     override fun onDestroy() {
         if (instance === this) instance = null
         runCatching { unregisterReceiver(screenOff) }
+        trackForeground(null)
         endSession()
         scope.cancel()
         super.onDestroy()

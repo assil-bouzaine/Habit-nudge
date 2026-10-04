@@ -58,6 +58,33 @@ class Prefs(context: Context) {
         get() = sp.getInt("nudgeMessageIndex", 0)
         set(v) = sp.edit { putInt("nudgeMessageIndex", v) }
 
+    // Bedtime mode: strictest nudges between start and end (window may cross midnight).
+    var bedtimeEnabled: Boolean
+        get() = sp.getBoolean("bedtimeEnabled", true)
+        set(v) = sp.edit { putBoolean("bedtimeEnabled", v) }
+    var bedtimeStartMin: Int
+        get() = sp.getInt("bedtimeStartMin", 23 * 60)
+        set(v) = sp.edit { putInt("bedtimeStartMin", v) }
+    var bedtimeEndMin: Int
+        get() = sp.getInt("bedtimeEndMin", 6 * 60)
+        set(v) = sp.edit { putInt("bedtimeEndMin", v) }
+    var bedtimeCheckInMin: Int
+        get() = sp.getInt("bedtimeCheckInMin", 5)
+        set(v) = sp.edit { putInt("bedtimeCheckInMin", v) }
+    var bedtimeStayLockSec: Int
+        get() = sp.getInt("bedtimeStayLockSec", 15)
+        set(v) = sp.edit { putInt("bedtimeStayLockSec", v) }
+
+    /** Daily limit for total time in watched apps; the streak counts days under it. */
+    var dailyLimitMin: Int
+        get() = sp.getInt("dailyLimitMin", 60)
+        set(v) = sp.edit { putInt("dailyLimitMin", v) }
+
+    /** First day stats were recorded; days before it don't count toward the streak. */
+    var statsStartDay: Long
+        get() = sp.getLong("statsStartDay", -1L)
+        set(v) = sp.edit { putLong("statsStartDay", v) }
+
     /** Day (epochDay) of the last "nudge service is off" warning, so it's at most once a day. */
     var serviceOffWarnedDay: Long
         get() = sp.getLong("serviceOffWarnedDay", -1L)

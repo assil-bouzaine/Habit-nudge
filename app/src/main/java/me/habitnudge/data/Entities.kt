@@ -67,6 +67,18 @@ data class NudgeMessage(
     val text: String,
 )
 
+/** Per watched app, per day: how often you opened it, how you answered the nudge, and time spent. */
+@Entity(tableName = "app_day_stat", primaryKeys = ["day", "packageName"])
+data class AppDayStat(
+    val day: Long,
+    val packageName: String,
+    val opens: Int = 0,
+    val getOuts: Int = 0,
+    val stays: Int = 0,
+    val checkIns: Int = 0,
+    val foregroundMs: Long = 0,
+)
+
 /** A fired Sticky/Nagging/Takeover reminder that is waiting for Done. */
 @Entity(tableName = "active_alert", indices = [Index("occurrenceKey", unique = true)])
 data class ActiveAlert(
