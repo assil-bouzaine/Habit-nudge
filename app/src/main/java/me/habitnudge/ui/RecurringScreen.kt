@@ -1,0 +1,179 @@
+package me.habitnudge.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import me.habitnudge.app
+import me.habitnudge.data.RecurringRule
+import me.habitnudge.schedule.Engine
+
+@Composable
+fun RecurringScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val app = context.app
+    val rules by app.db.rules().all().collectAsState(initial = emptyList())
+    var editing by remember { mutableStateOf<RecurringRule?>(null) }
+
+    // Writes run on the app scope so leaving the screen mid-save can't cancel them.
+    fun save(rule: RecurringRule) = app.scope.launch {
+        app.db.rules().upsert(rule)
+        Engine.reschedule(app)
+    }
+    fun delete(rule: RecurringRule) = app.scope.launch {
+        app.db.rules().delete(rule)
+        Engine.reschedule(app)
+    }
+
+    Box(modifier) {
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 88.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { Text("Recurring reminders", style = MaterialTheme.typography.headlineSmall) }
+            if (rules.isEmpty()) item { Text("None yet. Tap + to add one.") }
+            items(rules, key = { it.id }) { rule ->
+                Card(Modifier.fillMaxWidth().clickable { editing = rule }) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(rule.message, style = MaterialTheme.typography.titleMedium)
+                            Text(rule.summary(), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Switch(checked = rule.enabled, onCheckedChange = { save(rule.copy(enabled = it)) })
+                    }
+                }
+            }
+        }
+        FloatingActionButton(
+            onClick = { editing = RecurringRule(message = "", startMinute = 9 * 60, endMinute = 21 * 60, intervalMin = 60) },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) { Icon(Icons.Filled.Add, contentDescription = "Add recurring reminder") }
+    }
+
+    editing?.let { rule ->
+        RuleEditor(
+            initial = rule,
+            onSave = { save(it); editing = null },
+            onDelete = if (rule.id == 0L) null else ({ delete(rule); editing = null }),
+            onDismiss = { editing = null },
+        )
+    }
+}
+
+private fun RecurringRule.summary(): String {
+    val time = if (intervalMin == null) "Daily at ${formatMinute(startMinute)}"
+    else "Every $intervalMin min, ${formatMinute(startMinute)} to ${formatMinute(endMinute)}"
+    return "$time - ${style.strictness.label()}"
+}
+
+@Composable
+private fun RuleEditor(
+    initial: RecurringRule,
+    onSave: (RecurringRule) -> Unit,
+    onDelete: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    var rule by remember { mutableStateOf(initial) }
+    val repeating = rule.intervalMin != null
+    val error = when {
+        rule.message.isBlank() -> "Write a message."
+        repeating && rule.endMinute <= rule.startMinute -> "End must be after start."
+        else -> null
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial.id == 0L) "New recurring reminder" else "Edit recurring reminder") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = rule.message,
+                    onValueChange = { rule = rule.copy(message = it) },
+                    label = { Text("Message") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                ModeOption("Repeat during the day", selected = repeating) {
+                    if (!repeating) {
+                        rule = rule.copy(intervalMin = 90, endMinute = maxOf(rule.endMinute, (rule.startMinute + 60).coerceAtMost(23 * 60 + 59)))
+                    }
+                }
+                ModeOption("Once a day", selected = !repeating) {
+                    rule = rule.copy(intervalMin = null)
+                }
+                if (repeating) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TimeButton("From", rule.startMinute) { rule = rule.copy(startMinute = it) }
+                        Spacer(Modifier.width(8.dp))
+                        TimeButton("to", rule.endMinute) { rule = rule.copy(endMinute = it) }
+                    }
+                    NumberField("Every (minutes)", rule.intervalMin ?: 90, 5, 720) {
+                        rule = rule.copy(intervalMin = it)
+                    }
+                } else {
+                    TimeButton("At", rule.startMinute) { rule = rule.copy(startMinute = it, endMinute = it) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = rule.opensPlanner, onCheckedChange = { rule = rule.copy(opensPlanner = it) })
+                    Text("Tapping it opens tomorrow's plan")
+                }
+                StyleEditor(rule.style) { rule = rule.copy(style = it) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(rule.copy(message = rule.message.trim())) }, enabled = error == null) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                onDelete?.let { TextButton(onClick = it) { Text("Delete", color = MaterialTheme.colorScheme.error) } }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ModeOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().selectable(selected = selected, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(label)
+    }
+}

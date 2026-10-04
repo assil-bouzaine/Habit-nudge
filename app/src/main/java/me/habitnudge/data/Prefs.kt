@@ -29,6 +29,11 @@ class Prefs(context: Context) {
             .getOrDefault(Strictness.GENTLE)
         set(v) = sp.edit(commit = true) { putString("testStrictness", v.name) }
 
+    /** Default recurring reminders were created (once, on first run). */
+    var seeded: Boolean
+        get() = sp.getBoolean("seeded", false)
+        set(v) = sp.edit(commit = true) { putBoolean("seeded", v) }
+
     /** Settings the app can't read back, confirmed by hand on the health screen. */
     fun isConfirmed(key: String): Boolean = sp.getBoolean("confirmed_$key", false)
     fun setConfirmed(key: String, value: Boolean) = sp.edit { putBoolean("confirmed_$key", value) }
