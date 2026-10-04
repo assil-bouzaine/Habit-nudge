@@ -15,12 +15,14 @@ import me.habitnudge.data.ActiveAlert
 import me.habitnudge.data.Strictness
 import me.habitnudge.schedule.DoneReceiver
 import me.habitnudge.schedule.Occurrence
+import me.habitnudge.takeover.TakeoverActivity
 
 object Notifier {
     // A channel's sound and importance can't be changed after creation; bump the id to change them.
     const val CH_GENTLE = "gentle_v1"
     const val CH_STICKY = "sticky_v1"
     const val CH_NAG = "nag_v1"
+    const val CH_TAKEOVER = "takeover_v1"
 
     const val EXTRA_OPEN_PLANNER = "openPlanner"
     const val EXTRA_ALERT_ID = "alertId"
@@ -57,6 +59,14 @@ object Notifier {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             },
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_TAKEOVER, "Takeover reminders", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Full-screen card that wakes the phone; the card plays the alarm tone"
+                setSound(null, null)
+                enableVibration(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            },
+        )
     }
 
     fun showGentle(context: Context, o: Occurrence) {
@@ -72,13 +82,21 @@ object Notifier {
         nm(context).notify(TAG_GENTLE, o.key.hashCode(), n)
     }
 
-    /** Sticky/Nagging: can't be swiped away; only the Done action removes it. Re-posting re-alerts. */
+    /**
+     * Sticky/Nagging/Takeover: can't be swiped away; only Done removes it. Re-posting re-alerts.
+     * A Takeover's notification carries the full-screen intent that opens the card over the lock screen,
+     * unless it's deferred (during a call), when it's just a reminder in the shade.
+     */
     fun showActive(context: Context, alert: ActiveAlert) {
-        val channel = if (alert.style.strictness == Strictness.NAGGING) CH_NAG else CH_STICKY
-        val ignored = alert.timesAlerted - 1
+        val takeover = alert.style.strictness == Strictness.TAKEOVER
+        val channel = when (alert.style.strictness) {
+            Strictness.NAGGING -> CH_NAG
+            Strictness.TAKEOVER -> CH_TAKEOVER
+            else -> CH_STICKY
+        }
         val text = when {
-            alert.escalated -> "Ignored $ignored times. Tap Done when it's done."
-            ignored > 0 -> "Reminder ${alert.timesAlerted}. Tap Done when it's done."
+            alert.escalated -> "Ignored ${alert.timesAlerted} times. Tap Done when it's done."
+            alert.timesAlerted > 1 -> "Reminder ${alert.timesAlerted}. Tap Done when it's done."
             else -> "Tap Done when it's done."
         }
         val done = PendingIntent.getBroadcast(
@@ -86,21 +104,29 @@ object Notifier {
             Intent(context, DoneReceiver::class.java).putExtra(EXTRA_ALERT_ID, alert.id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val content = if (takeover) openTakeover(context) else openApp(context, alert.opensPlanner)
         val n = Notification.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notif)
             .setContentTitle(alert.message)
             .setContentText(text)
             .setWhen(alert.dueAt)
             .setShowWhen(true)
-            .setCategory(Notification.CATEGORY_REMINDER)
+            .setCategory(if (takeover) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setContentIntent(openApp(context, alert.opensPlanner))
+            .setContentIntent(content)
             .addAction(Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notif), "Done", done).build())
+            .apply { if (takeover && alert.nextNagAt == null) setFullScreenIntent(content, true) }
             .build()
         nm(context).notify(TAG_ACTIVE, alert.id.toInt(), n)
     }
+
+    private fun openTakeover(context: Context): PendingIntent = PendingIntent.getActivity(
+        context, 2,
+        Intent(context, TakeoverActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
 
     fun cancelActive(context: Context, alertId: Long) = nm(context).cancel(TAG_ACTIVE, alertId.toInt())
 

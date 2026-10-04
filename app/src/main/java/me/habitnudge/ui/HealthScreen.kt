@@ -52,7 +52,8 @@ fun HealthScreen(modifier: Modifier = Modifier) {
     val prefs = context.app.prefs
     val nextAt = remember(refresh) { prefs.nextAlarmAt }
     val nextLabel = remember(refresh) { prefs.nextAlarmLabel }
-    var testLevel by remember { mutableStateOf(Strictness.GENTLE) }
+    // Start from the last level tested, so a restarted app doesn't silently fall back to Gentle.
+    var testLevel by remember { mutableStateOf(prefs.testStrictness) }
 
     LazyColumn(
         modifier = modifier,
@@ -77,7 +78,8 @@ fun HealthScreen(modifier: Modifier = Modifier) {
                     Text("Test reminder", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Fires in 1 minute. Lock the phone and wait for it. " +
-                            "A Nagging test repeats every minute and escalates after 3 ignored alerts.",
+                            "A Nagging test repeats every minute and becomes a Takeover after 3 ignored alerts. " +
+                            "A Takeover test's Done unlocks after 10 seconds.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     for (level in TESTABLE) {
@@ -136,8 +138,7 @@ private fun HealthRow(item: HealthItem, refresh: Int, onChanged: () -> Unit) {
     }
 }
 
-// Takeover joins this list in step 3.
-private val TESTABLE = listOf(Strictness.GENTLE, Strictness.STICKY, Strictness.NAGGING)
+private val TESTABLE = Strictness.entries
 
 fun Strictness.label(): String = name.lowercase().replaceFirstChar { it.uppercase() }
 

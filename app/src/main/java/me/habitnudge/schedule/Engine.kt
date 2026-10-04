@@ -11,6 +11,8 @@ import me.habitnudge.app
 import me.habitnudge.data.ActiveAlert
 import me.habitnudge.data.Strictness
 import me.habitnudge.notify.Notifier
+import me.habitnudge.takeover.AlarmSound
+import me.habitnudge.takeover.Takeover
 
 /**
  * Keeps exactly one alarm set: the next moment anything is due (a reminder or a repeat nag).
@@ -20,6 +22,7 @@ object Engine {
     /** Reminders more than this late (phone off, app killed) are dropped instead of fired. */
     const val LATE_GRACE_MS = 30 * 60_000L
     private const val LOOKAHEAD_MS = 8 * 24 * 60 * 60_000L
+    private const val TAKEOVER_RETRY_MS = 60_000L
 
     private val mutex = Mutex()
 
@@ -31,9 +34,25 @@ object Engine {
         scheduleNext(context)
     }
 
-    /** App opened: put back any Sticky/Nagging notifications EMUI cleared, and re-arm. */
+    /** App opened: put back any notifications EMUI cleared, bring back a pending Takeover, and re-arm. */
     suspend fun onAppStart(context: Context) = mutex.withLock {
         restoreActive(context)
+        if (context.app.db.alerts().takeoverQueue().isNotEmpty() && !Takeover.inCall(context)) {
+            Takeover.launch(context)
+        }
+        scheduleNext(context)
+    }
+
+    /** A call started while a Takeover was up: hide it and retry every minute until the call ends. */
+    suspend fun deferTakeovers(context: Context) = mutex.withLock {
+        val dao = context.app.db.alerts()
+        val retryAt = System.currentTimeMillis() + TAKEOVER_RETRY_MS
+        for (a in dao.takeoverQueue()) {
+            val deferred = a.copy(nextNagAt = retryAt)
+            dao.update(deferred)
+            AlarmSound.allowRingAgain(a.id)
+            Notifier.showActive(context, deferred)
+        }
         scheduleNext(context)
     }
 
@@ -44,8 +63,11 @@ object Engine {
 
     /** Done tapped on a Sticky/Nagging reminder. */
     suspend fun done(context: Context, alertId: Long) = mutex.withLock {
-        context.app.db.alerts().delete(alertId)
+        val dao = context.app.db.alerts()
+        dao.delete(alertId)
         Notifier.cancelActive(context, alertId)
+        Takeover.shownAt.remove(alertId)
+        if (dao.takeoverQueue().isEmpty()) AlarmSound.stop()
         scheduleNext(context)
     }
 
@@ -75,7 +97,6 @@ object Engine {
     private suspend fun fire(context: Context, o: Occurrence, now: Long) {
         when (o.style.strictness) {
             Strictness.GENTLE -> Notifier.showGentle(context, o)
-            // Takeover arrives in step 3; until then it behaves like Sticky.
             Strictness.STICKY, Strictness.NAGGING, Strictness.TAKEOVER -> {
                 val alert = ActiveAlert(
                     occurrenceKey = o.key,
@@ -86,7 +107,9 @@ object Engine {
                     nextNagAt = if (o.style.strictness == Strictness.NAGGING) now + nagMillis(o.style.nagEveryMin) else null,
                 )
                 val id = context.app.db.alerts().insert(alert)
-                if (id != -1L) Notifier.showActive(context, alert.copy(id = id))
+                if (id == -1L) return
+                if (o.style.strictness == Strictness.TAKEOVER) presentTakeover(context, alert.copy(id = id))
+                else Notifier.showActive(context, alert.copy(id = id))
             }
         }
     }
@@ -95,17 +118,46 @@ object Engine {
         val dao = context.app.db.alerts()
         val now = System.currentTimeMillis()
         for (a in dao.nagsDue(now)) {
+            if (a.style.strictness == Strictness.TAKEOVER) {
+                // A Takeover deferred by a call: try again.
+                presentTakeover(context, a.copy(nextNagAt = null))
+                continue
+            }
             val limit = a.style.escalateAfterNags
             // timesAlerted so far = times ignored, since Done removes the alert.
-            val escalate = !a.escalated && limit != null && a.timesAlerted >= limit
-            // Escalation to Takeover arrives in step 3; until then an escalated alert keeps nagging.
+            if (limit != null && a.timesAlerted >= limit) {
+                val escalated = a.copy(
+                    style = a.style.copy(strictness = Strictness.TAKEOVER),
+                    nextNagAt = null,
+                    escalated = true,
+                )
+                presentTakeover(context, escalated)
+                continue
+            }
             val updated = a.copy(
                 timesAlerted = a.timesAlerted + 1,
                 nextNagAt = now + nagMillis(a.style.nagEveryMin),
-                escalated = a.escalated || escalate,
             )
             dao.update(updated)
             Notifier.showActive(context, updated)
+        }
+    }
+
+    /** Shows a Takeover now, or, during a call, keeps it in the shade and retries in a minute. */
+    private suspend fun presentTakeover(context: Context, alert: ActiveAlert) {
+        val toSave = if (Takeover.inCall(context)) {
+            alert.copy(nextNagAt = System.currentTimeMillis() + TAKEOVER_RETRY_MS)
+        } else {
+            alert.copy(nextNagAt = null)
+        }
+        context.app.db.alerts().update(toSave)
+        // The notification's full-screen intent opens the card when the screen is off or locked...
+        Notifier.showActive(context, toSave)
+        // ...and starting it directly covers the case where another app is in the foreground.
+        if (toSave.nextNagAt == null) {
+            // Ring from here, not from the card: over EMUI's lock screen the card stays paused.
+            AlarmSound.ringFor(context, toSave.id)
+            Takeover.launch(context)
         }
     }
 

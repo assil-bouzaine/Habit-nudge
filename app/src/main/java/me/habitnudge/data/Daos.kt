@@ -44,6 +44,13 @@ interface AlertDao {
     @Query("SELECT * FROM active_alert")
     suspend fun all(): List<ActiveAlert>
 
+    /** Takeovers that should be on screen now (deferred ones, e.g. during a call, have nextNagAt set). */
+    @Query("SELECT * FROM active_alert WHERE strictness = 'TAKEOVER' AND nextNagAt IS NULL ORDER BY dueAt")
+    suspend fun takeoverQueue(): List<ActiveAlert>
+
+    @Query("SELECT * FROM active_alert WHERE strictness = 'TAKEOVER' AND nextNagAt IS NULL ORDER BY dueAt")
+    fun takeoverQueueFlow(): Flow<List<ActiveAlert>>
+
     @Query("SELECT * FROM active_alert WHERE nextNagAt IS NOT NULL ORDER BY nextNagAt LIMIT 1")
     suspend fun nextNag(): ActiveAlert?
 

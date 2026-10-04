@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
@@ -27,6 +28,7 @@ object Health {
         val pkgUri = Uri.parse("package:$pkg")
         val nm = context.getSystemService(NotificationManager::class.java)
         val pm = context.getSystemService(PowerManager::class.java)
+        val audio = context.getSystemService(AudioManager::class.java)
         val appNotifSettings = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
         val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
@@ -63,6 +65,17 @@ object Health {
                 Notifier.CH_NAG, "Nagging reminders pop up",
                 "The \"Nagging reminders\" category must be set to pop up (urgent / banners).",
                 NotificationManager.IMPORTANCE_HIGH,
+            ),
+            channelItem(
+                Notifier.CH_TAKEOVER, "Takeover can wake the phone",
+                "The \"Takeover reminders\" category must stay urgent, or the card can't open over the lock screen.",
+                NotificationManager.IMPORTANCE_HIGH,
+            ),
+            HealthItem(
+                "alarm_volume", "Alarm volume up",
+                "Nagging and Takeover play on the alarm volume, which vibrate mode doesn't mute.",
+                audio.getStreamVolume(AudioManager.STREAM_ALARM) > 0,
+                listOf(Intent(Settings.ACTION_SOUND_SETTINGS)),
             ),
             HealthItem(
                 "banners", "Banners and lock screen notifications on",
