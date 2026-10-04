@@ -1,0 +1,105 @@
+package me.habitnudge.ui
+
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import android.app.NotificationManager
+import me.habitnudge.app
+import me.habitnudge.notify.Notifier
+
+/** One thing the app depends on, with the settings screens that fix it (tried in order). */
+data class HealthItem(
+    val key: String,
+    val title: String,
+    val detail: String,
+    /** null = the app can't read this setting; the user confirms it by hand. */
+    val ok: Boolean?,
+    val fixIntents: List<Intent>,
+)
+
+object Health {
+    fun items(context: Context): List<HealthItem> {
+        val pkg = context.packageName
+        val pkgUri = Uri.parse("package:$pkg")
+        val nm = context.getSystemService(NotificationManager::class.java)
+        val pm = context.getSystemService(PowerManager::class.java)
+        val appNotifSettings = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
+        val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+
+        val gentleImportance = nm.getNotificationChannel(Notifier.CH_GENTLE)?.importance
+            ?: NotificationManager.IMPORTANCE_NONE
+
+        return listOf(
+            HealthItem(
+                "notifications", "Notifications allowed",
+                "Without this, no reminder can show.",
+                nm.areNotificationsEnabled(),
+                listOf(appNotifSettings, appDetails),
+            ),
+            HealthItem(
+                "ch_gentle", "Gentle reminders make a sound",
+                "The \"Gentle reminders\" category must stay at default importance or higher.",
+                gentleImportance >= NotificationManager.IMPORTANCE_DEFAULT,
+                listOf(
+                    Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
+                        .putExtra(Settings.EXTRA_CHANNEL_ID, Notifier.CH_GENTLE),
+                    appNotifSettings,
+                ),
+            ),
+            HealthItem(
+                "banners", "Banners and lock screen notifications on",
+                "EMUI: in this app's notification settings, turn on Banners and Lock screen notifications. " +
+                    "The app can't read these, so tick the box once done.",
+                null,
+                listOf(appNotifSettings, appDetails),
+            ),
+            HealthItem(
+                "overlay", "Display over other apps",
+                "Needed for Takeover cards on top of other apps.",
+                Settings.canDrawOverlays(context),
+                listOf(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri), appDetails),
+            ),
+            HealthItem(
+                "battery", "Battery optimization off",
+                "Stops Android delaying reminders while the phone sleeps.",
+                pm.isIgnoringBatteryOptimizations(pkg),
+                listOf(
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkgUri),
+                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                ),
+            ),
+            HealthItem(
+                "app_launch", "Huawei App launch: Manage manually",
+                "Phone Manager > App launch > Habit Nudge: switch off \"Manage automatically\", then turn on " +
+                    "Auto-launch, Secondary launch and Run in background. Tick the box once done.",
+                null,
+                listOf(
+                    Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")),
+                    Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity")),
+                    appDetails,
+                ),
+            ),
+        )
+    }
+
+    /** Opens the first fix screen that exists on this phone. */
+    fun openFix(context: Context, item: HealthItem): Boolean {
+        for (intent in item.fixIntents) {
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return true
+            } catch (_: ActivityNotFoundException) {
+            } catch (_: SecurityException) {
+            }
+        }
+        return false
+    }
+
+    fun isConfirmed(context: Context, item: HealthItem) = context.app.prefs.isConfirmed(item.key)
+}
