@@ -14,10 +14,16 @@ New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
 function Invoke-Build {
     Push-Location $proj
     [Environment]::CurrentDirectory = $proj
-    # Gradle writes progress to stderr; under 'Stop', PowerShell 5.1 would treat that as a fatal error.
-    $ErrorActionPreference = 'Continue'
-    try { & (Join-Path $proj 'gradlew.bat') assembleRelease --console=plain *> $log } finally { Pop-Location }
-    return $LASTEXITCODE
+    # Start-Process keeps stdout/stderr as plain text: redirecting a native command's stderr in
+    # PowerShell 5.1 wraps each line in an error record, which garbles compiler errors.
+    $err = "$log.err"
+    try {
+        $p = Start-Process -FilePath (Join-Path $proj 'gradlew.bat') -ArgumentList 'assembleRelease', '--console=plain' `
+            -WorkingDirectory $proj -RedirectStandardOutput $log -RedirectStandardError $err -NoNewWindow -Wait -PassThru
+    } finally { Pop-Location }
+    Get-Content $err | Add-Content $log
+    Remove-Item $err
+    return $p.ExitCode
 }
 
 $code = Invoke-Build

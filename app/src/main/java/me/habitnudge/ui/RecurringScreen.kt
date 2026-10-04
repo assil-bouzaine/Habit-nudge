@@ -1,6 +1,5 @@
 package me.habitnudge.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,10 +17,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -62,27 +64,50 @@ fun RecurringScreen(modifier: Modifier = Modifier) {
 
     Box(modifier) {
         LazyColumn(
-            contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 88.dp),
+            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { Text("Recurring reminders", style = MaterialTheme.typography.headlineSmall) }
-            if (rules.isEmpty()) item { Text("None yet. Tap + to add one.") }
+            item {
+                val on = rules.count { it.enabled }
+                ScreenHeader("Recurring", if (rules.isEmpty()) "Reminders that repeat every day" else "$on of ${rules.size} on")
+            }
+            if (rules.isEmpty()) {
+                item { EmptyState("🔁", "Nothing repeating", "Add things like \"drink water\" every 90 minutes.") }
+            }
             items(rules, key = { it.id }) { rule ->
-                Card(Modifier.fillMaxWidth().clickable { editing = rule }) {
+                AppCard(Modifier.alpha(if (rule.enabled) 1f else 0.6f), onClick = { editing = rule }) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconBadge(
+                            if (rule.intervalMin == null) Icons.Filled.Notifications else Icons.Filled.Refresh,
+                            if (rule.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(rule.message, style = MaterialTheme.typography.titleMedium)
-                            Text(rule.summary(), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                rule.timeSummary(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                StrictnessPill(rule.style.strictness)
+                                if (rule.opensPlanner) Pill("Opens plan", MaterialTheme.colorScheme.secondary)
+                            }
                         }
                         Switch(checked = rule.enabled, onCheckedChange = { save(rule.copy(enabled = it)) })
                     }
                 }
             }
         }
-        FloatingActionButton(
+        ExtendedFloatingActionButton(
             onClick = { editing = RecurringRule(message = "", startMinute = 9 * 60, endMinute = 21 * 60, intervalMin = 60) },
+            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            text = { Text("New") },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) { Icon(Icons.Filled.Add, contentDescription = "Add recurring reminder") }
+        )
     }
 
     editing?.let { rule ->
@@ -95,11 +120,9 @@ fun RecurringScreen(modifier: Modifier = Modifier) {
     }
 }
 
-private fun RecurringRule.summary(): String {
-    val time = if (intervalMin == null) "Daily at ${formatMinute(startMinute)}"
+private fun RecurringRule.timeSummary(): String =
+    if (intervalMin == null) "Daily at ${formatMinute(startMinute)}"
     else "Every $intervalMin min, ${formatMinute(startMinute)} to ${formatMinute(endMinute)}"
-    return "$time - ${style.strictness.label()}"
-}
 
 @Composable
 private fun RuleEditor(
@@ -118,6 +141,7 @@ private fun RuleEditor(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         title = { Text(if (initial.id == 0L) "New recurring reminder" else "Edit recurring reminder") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {

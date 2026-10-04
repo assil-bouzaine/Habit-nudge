@@ -39,6 +39,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("seededNudge", false)
         set(v) = sp.edit(commit = true) { putBoolean("seededNudge", v) }
 
+    /** The gentle default messages were swapped for the ruthless set. */
+    var seededRuthless: Boolean
+        get() = sp.getBoolean("seededRuthless", false)
+        set(v) = sp.edit(commit = true) { putBoolean("seededRuthless", v) }
+
     /** How long the nudge card (or notification) stays before fading. */
     var nudgeSeconds: Int
         get() = sp.getInt("nudgeSeconds", 6)

@@ -10,9 +10,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,7 +48,7 @@ fun pickTime(context: Context, initialMinute: Int, onPicked: (Int) -> Unit) {
 @Composable
 fun TimeButton(label: String, minuteOfDay: Int, onPicked: (Int) -> Unit) {
     val context = LocalContext.current
-    OutlinedButton(onClick = { pickTime(context, minuteOfDay, onPicked) }) {
+    FilledTonalButton(onClick = { pickTime(context, minuteOfDay, onPicked) }) {
         Text("$label ${formatMinute(minuteOfDay)}")
     }
 }
@@ -89,10 +92,14 @@ fun StyleEditor(style: AlertStyle, onChange: (AlertStyle) -> Unit) {
             ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            RadioButton(selected = style.strictness == level, onClick = null)
-            Column {
-                Text(level.label())
-                Text(level.description(), style = MaterialTheme.typography.bodySmall)
+            RadioButton(
+                selected = style.strictness == level,
+                onClick = null,
+                colors = RadioButtonDefaults.colors(selectedColor = level.color()),
+            )
+            Column(Modifier.padding(vertical = 6.dp)) {
+                Text(level.label(), style = MaterialTheme.typography.titleSmall, color = level.color())
+                Text(level.description(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

@@ -4,7 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -15,6 +15,7 @@ import me.habitnudge.data.Seed
 import me.habitnudge.notify.Notifier
 import me.habitnudge.schedule.Engine
 import me.habitnudge.ui.AppRoot
+import me.habitnudge.ui.AppTheme
 import me.habitnudge.ui.Tab
 import me.habitnudge.ui.defaultPlanDay
 import me.habitnudge.ui.today
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
     private var planDay by mutableLongStateOf(defaultPlanDay())
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handleIntent(intent)
         lifecycleScope.launch {
@@ -32,7 +34,7 @@ class MainActivity : ComponentActivity() {
             Engine.onAppStart(applicationContext)
         }
         setContent {
-            MaterialTheme {
+            AppTheme {
                 AppRoot(tab = tab, onTab = { tab = it }, planDay = planDay, onPlanDay = { planDay = it })
             }
         }

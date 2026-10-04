@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only window-state changes (which app is in front); no window content is retrieved. -->
+<!--
+  Event types are only used to learn which app is in front (event.packageName); no window content
+  is retrieved. Content/scroll/click events are needed because EMUI sends no window-state event
+  when you return to an app from recents.
+-->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled|typeViewClicked|typeViewFocused"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canRetrieveWindowContent="false"
     android:description="@string/nudge_service_description"
-    android:notificationTimeout="100" />
+    android:notificationTimeout="200" />

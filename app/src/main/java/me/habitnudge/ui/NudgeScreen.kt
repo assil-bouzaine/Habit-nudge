@@ -4,6 +4,18 @@ import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,14 +32,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -77,42 +86,58 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Text("App-open nudge", style = MaterialTheme.typography.headlineSmall) }
+        item { ScreenHeader("Nudge", "A reality check when you open apps you want to use less") }
         item {
-            val colors = if (serviceOn) CardDefaults.cardColors()
-            else CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-            Card(Modifier.fillMaxWidth(), colors = colors) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        if (serviceOn) "Nudge service is on" else "Nudge service is off",
-                        style = MaterialTheme.typography.titleMedium,
+            AppCard {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                    IconBadge(
+                        if (serviceOn) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                        if (serviceOn) SuccessGreen else MaterialTheme.colorScheme.error,
                     )
-                    Text(
-                        "It only notices which app is in front; it never reads what's on screen. " +
-                            "In Accessibility settings, find Habit Nudge and turn it on.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    OutlinedButton(onClick = {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }) { Text("Open accessibility settings") }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (serviceOn) "Nudge service is on" else "Nudge service is off",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "It only notices which app is in front; it never reads what's on screen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (!serviceOn) {
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = {
+                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            }) { Text("Turn on") }
+                        }
+                    }
                 }
             }
         }
 
-        item { SectionTitle("Watched apps") }
-        if (apps.isEmpty()) item { Text("No apps yet.") }
+        item { SectionLabel("Watched apps") }
+        if (apps.isEmpty()) {
+            item { EmptyState("\uD83D\uDCF1", "No apps yet", "Choose the apps you open without thinking.") }
+        }
         items(apps, key = { it.packageName }) { a ->
-            Card(Modifier.fillMaxWidth().clickable { editing = a }) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            AppCard(Modifier.alpha(if (a.enabled) 1f else 0.6f), onClick = { editing = a }) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AppIcon(a.packageName)
+                    Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(a.label, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "${if (a.style == NudgeStyle.CARD) "Card" else "Notification"} on open - " + if (a.checkInMin > 0) "\"Still here?\" every ${a.checkInMin} min" else "no check-ins",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Pill(if (a.style == NudgeStyle.CARD) "Card" else "Banner", MaterialTheme.colorScheme.primary)
+                            Pill(
+                                if (a.checkInMin > 0) "Check-in ${a.checkInMin} min" else "No check-ins",
+                                MaterialTheme.colorScheme.secondary,
+                            )
+                        }
                     }
                     Switch(checked = a.enabled, onCheckedChange = { on ->
                         app.scope.launch { dao.upsertApp(a.copy(enabled = on)) }
@@ -120,69 +145,82 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
-        item { Button(onClick = { picking = true }) { Text("Choose apps") } }
-
-        item { SectionTitle("Messages") }
         item {
-            Text(
-                "Shown in turn. {app} becomes the app's name.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        items(messages, key = { it.id }) { m ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(m.text, Modifier.weight(1f))
-                IconButton(
-                    onClick = { app.scope.launch { dao.deleteMessage(m) } },
-                    enabled = messages.size > 1,
-                ) { Icon(Icons.Filled.Delete, contentDescription = "Delete message") }
+            FilledTonalButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Text(if (apps.isEmpty()) "Choose apps" else "Add or remove apps")
             }
-            HorizontalDivider()
-        }
-        item {
-            OutlinedTextField(
-                value = newMessage,
-                onValueChange = { newMessage = it },
-                label = { Text("New message") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            TextButton(
-                onClick = {
-                    val text = newMessage.trim()
-                    app.scope.launch { dao.insertMessage(NudgeMessage(text = text)) }
-                    newMessage = ""
-                },
-                enabled = newMessage.isNotBlank(),
-            ) { Text("Add message") }
         }
 
-        item { SectionTitle("Card") }
+        item { SectionLabel("Messages") }
         item {
-            NumberField("Fades after (seconds)", seconds, 2, 60) {
-                seconds = it
-                app.prefs.nudgeSeconds = it
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = getMeOut, onCheckedChange = {
-                    getMeOut = it
-                    app.prefs.nudgeGetMeOut = it
-                })
-                Text("Show a \"Get me out\" button (goes to the home screen)")
-            }
-            OutlinedButton(onClick = {
-                val service = NudgeService.instance
-                if (service == null) {
-                    Toast.makeText(context, "Turn on the nudge service first.", Toast.LENGTH_SHORT).show()
-                } else {
-                    // Preview as the first watched app, so the card shows its real icon.
-                    val sample = apps.firstOrNull()
-                    val label = sample?.label ?: "Instagram"
-                    app.scope.launch {
-                        val msg = Nudges.nextMessage(app, label)
-                        withContext(Dispatchers.Main) { service.show(NudgeStyle.CARD, label, msg, sample?.packageName) }
+            AppCard {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        "Shown in turn. {app} becomes the app's name.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    messages.forEachIndexed { i, m ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("\u201C${m.text}\u201D", Modifier.weight(1f).padding(vertical = 10.dp))
+                            IconButton(
+                                onClick = { app.scope.launch { dao.deleteMessage(m) } },
+                                enabled = messages.size > 1,
+                            ) { Icon(Icons.Filled.Delete, contentDescription = "Delete message", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
                     }
+                    OutlinedTextField(
+                        value = newMessage,
+                        onValueChange = { newMessage = it },
+                        placeholder = { Text("Write a new message") },
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                    TextButton(
+                        onClick = {
+                            val text = newMessage.trim()
+                            app.scope.launch { dao.insertMessage(NudgeMessage(text = text)) }
+                            newMessage = ""
+                        },
+                        enabled = newMessage.isNotBlank(),
+                    ) { Text("Add message") }
                 }
-            }) { Text("Preview the card") }
+            }
+        }
+
+        item { SectionLabel("Card") }
+        item {
+            AppCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NumberField("Fades after (seconds)", seconds, 2, 60) {
+                        seconds = it
+                        app.prefs.nudgeSeconds = it
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("\"Get me out\" button", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Switch(checked = getMeOut, onCheckedChange = {
+                            getMeOut = it
+                            app.prefs.nudgeGetMeOut = it
+                        })
+                    }
+                    Button(onClick = {
+                        val service = NudgeService.instance
+                        if (service == null) {
+                            Toast.makeText(context, "Turn on the nudge service first.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            // Preview as the first watched app, so the card shows its real icon.
+                            val sample = apps.firstOrNull()
+                            val label = sample?.label ?: "Instagram"
+                            app.scope.launch {
+                                val msg = Nudges.nextMessage(app, label)
+                                withContext(Dispatchers.Main) { service.show(NudgeStyle.CARD, label, msg, sample?.packageName) }
+                            }
+                        }
+                    }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Preview the card") }
+                }
+            }
         }
     }
 
@@ -211,9 +249,18 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
     }
 }
 
+/** The installed app's real launcher icon. */
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
+private fun AppIcon(pkg: String) {
+    val context = LocalContext.current
+    val icon = remember(pkg) {
+        runCatching { context.packageManager.getApplicationIcon(pkg).toBitmap(96, 96).asImageBitmap() }.getOrNull()
+    }
+    if (icon != null) {
+        Image(icon, contentDescription = null, modifier = Modifier.size(44.dp))
+    } else {
+        IconBadge(Icons.Filled.Face, MaterialTheme.colorScheme.primary, 44.dp)
+    }
 }
 
 private data class Launchable(val packageName: String, val label: String)

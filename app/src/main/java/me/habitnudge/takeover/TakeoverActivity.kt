@@ -9,6 +9,16 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import me.habitnudge.ui.AppTheme
+import me.habitnudge.ui.BrandBlue
+import me.habitnudge.ui.BrandBlueDark
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -18,9 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,9 +76,9 @@ class TakeoverActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            AppTheme {
                 BackHandler(enabled = true) { /* Back doesn't dismiss a Takeover. */ }
-                Surface(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(BrandBlue, BrandBlueDark)))) {
                     queue.firstOrNull()?.let { alert ->
                         TakeoverCard(alert, more = queue.size - 1) {
                             lifecycleScope.launch { Engine.done(applicationContext, alert.id) }
@@ -129,6 +137,7 @@ private fun TakeoverCard(alert: ActiveAlert, more: Int, onDone: () -> Unit) {
         }
     }
 
+    val soft = Color.White.copy(alpha = 0.75f)
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -136,14 +145,17 @@ private fun TakeoverCard(alert: ActiveAlert, more: Int, onDone: () -> Unit) {
     ) {
         Text(
             DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(alert.dueAt)),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Light,
+            color = soft,
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
         Text(
             alert.message,
-            fontSize = 34.sp,
-            lineHeight = 42.sp,
+            color = Color.White,
+            fontSize = 36.sp,
+            lineHeight = 44.sp,
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
         if (alert.escalated) {
@@ -151,23 +163,29 @@ private fun TakeoverCard(alert: ActiveAlert, more: Int, onDone: () -> Unit) {
             Text(
                 "You ignored this ${alert.timesAlerted} times.",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = soft,
             )
         }
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(56.dp))
         Button(
             onClick = onDone,
             enabled = remaining == 0,
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White,
+                contentColor = BrandBlue,
+                disabledContainerColor = Color.White.copy(alpha = 0.25f),
+                disabledContentColor = Color.White.copy(alpha = 0.8f),
+            ),
             modifier = Modifier.fillMaxWidth().height(64.dp),
         ) {
-            Text(if (remaining > 0) "Done ($remaining)" else "Done", fontSize = 22.sp)
+            Text(if (remaining > 0) "Done in $remaining" else "Done", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
         if (more > 0) {
             Spacer(Modifier.height(16.dp))
-            Text("$more more after this", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$more more after this", color = soft)
         }
     }
 }
-
 private fun secondsUntil(at: Long): Int =
     ((at - System.currentTimeMillis() + 999) / 1000).toInt().coerceAtLeast(0)

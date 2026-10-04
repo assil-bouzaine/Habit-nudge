@@ -34,6 +34,9 @@ interface PlannedDao {
 
     @Query("DELETE FROM planned_reminder WHERE epochDay < :day")
     suspend fun deleteBefore(day: Long)
+
+    @Query("DELETE FROM planned_reminder WHERE id IN (:ids)")
+    suspend fun deleteIds(ids: List<Long>)
 }
 
 @Dao
@@ -79,6 +82,9 @@ interface NudgeDao {
 
     @Delete
     suspend fun deleteMessage(message: NudgeMessage)
+
+    @Query("DELETE FROM nudge_message WHERE text IN (:texts)")
+    suspend fun deleteMessagesWithText(texts: List<String>)
 }
 
 @Dao

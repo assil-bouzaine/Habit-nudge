@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Same green as the nudge card's accent. -->
-    <color name="ic_launcher_background">#2E7D6B</color>
+    <!-- Facebook-style blue; same as BrandBlue in Theme.kt. -->
+    <color name="brand_blue">#1877F2</color>
+    <color name="ic_launcher_background">#1877F2</color>
+    <color name="window_background">#F3F6FB</color>
 </resources>

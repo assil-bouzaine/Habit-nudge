@@ -24,7 +24,9 @@ import me.habitnudge.data.NudgeStyle
 import me.habitnudge.notify.Notifier
 
 /**
- * Watches which app is in front (window-state changes only; no screen content is read).
+ * Watches which app is in front, using only the package name on accessibility events; no screen
+ * content is read. Window-state events alone aren't enough: EMUI sends none when you return to an
+ * app from recents, so content/scroll/click events from the app count as "it's in front" too.
  *
  * Opening a watched app nudges every time, where "opening" means arriving from the home screen,
  * from a locked screen, or from another app you'd been in for more than [HANDOFF_GRACE_MS].
@@ -57,6 +59,15 @@ class NudgeService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
+        // Apply the event list at runtime too: Android can keep a stale copy of the XML config across app updates.
+        serviceInfo = serviceInfo.apply {
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_SCROLLED or
+                AccessibilityEvent.TYPE_VIEW_CLICKED or
+                AccessibilityEvent.TYPE_VIEW_FOCUSED
+            notificationTimeout = 200
+        }
         instance = this
         card = NudgeCard(this)
         registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF))
@@ -66,7 +77,7 @@ class NudgeService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        // Any event tells us which app is in front. Most are from the current app: return fast.
         val pkg = event.packageName?.toString() ?: return
         if (pkg == current || isTransient(pkg)) return
         current = pkg
@@ -153,15 +164,23 @@ class NudgeService : AccessibilityService() {
 
     /** Surfaces that sit on top of an app without leaving it: our own windows, the shade, keyboards, share sheets. */
     private fun isTransient(pkg: String): Boolean =
-        pkg == packageName || pkg in SYSTEM_SURFACES || pkg in inputMethods()
+        pkg == packageName || pkg in SYSTEM_SURFACES || pkg in cachedPackages().inputMethods
 
-    private fun inputMethods(): Set<String> =
-        getSystemService(InputMethodManager::class.java).enabledInputMethodList.map { it.packageName }.toSet()
+    private fun isHome(pkg: String): Boolean = pkg in cachedPackages().homes
 
-    private fun isHome(pkg: String): Boolean =
-        packageManager.queryIntentActivities(
+    private class KnownPackages(val inputMethods: Set<String>, val homes: Set<String>, val at: Long)
+    private var known: KnownPackages? = null
+
+    /** Keyboards and launchers, refreshed every few minutes: these checks now run on many more events. */
+    private fun cachedPackages(): KnownPackages {
+        val now = SystemClock.elapsedRealtime()
+        known?.takeIf { now - it.at < 5 * 60_000L }?.let { return it }
+        val imes = getSystemService(InputMethodManager::class.java).enabledInputMethodList.map { it.packageName }.toSet()
+        val homes = packageManager.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY,
-        ).any { it.activityInfo.packageName == pkg }
+        ).map { it.activityInfo.packageName }.toSet()
+        return KnownPackages(imes, homes, now).also { known = it }
+    }
 
     override fun onInterrupt() {}
 

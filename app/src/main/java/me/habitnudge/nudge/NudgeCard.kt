@@ -39,10 +39,11 @@ class NudgeCard(private val service: AccessibilityService) {
     private fun palette(): Palette {
         val night = (service.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
+        // Same blues as the app theme (BrandBlue in Theme.kt).
         return if (night) {
-            Palette(0xFF23272A.toInt(), 0xFFECEFF1.toInt(), 0xFF9AA5AC.toInt(), 0xFF6FCFB5.toInt(), 0xFF00382D.toInt(), 0x336FCFB5)
+            Palette(0xFF161B22.toInt(), 0xFFE6EAF0.toInt(), 0xFFA3AEBD.toInt(), 0xFF6AA6FF.toInt(), 0xFF002A66.toInt(), 0x336AA6FF)
         } else {
-            Palette(0xFFFFFFFF.toInt(), 0xFF1D2427.toInt(), 0xFF6B777D.toInt(), 0xFF2E7D6B.toInt(), 0xFFFFFFFF.toInt(), 0x1F2E7D6B)
+            Palette(0xFFFFFFFF.toInt(), 0xFF101828.toInt(), 0xFF5A6474.toInt(), 0xFF1877F2.toInt(), 0xFFFFFFFF.toInt(), 0x1F1877F2)
         }
     }
 
@@ -124,7 +125,7 @@ class NudgeCard(private val service: AccessibilityService) {
                     })
                 }
                 addView(TextView(service).apply {
-                    text = "A GENTLE NUDGE"
+                    text = "REALITY CHECK"
                     setTextColor(p.muted)
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                     letterSpacing = 0.12f
@@ -140,12 +141,16 @@ class NudgeCard(private val service: AccessibilityService) {
 
                 addView(LinearLayout(service).apply {
                     orientation = LinearLayout.HORIZONTAL
+                    // Leaving is the bold, obvious choice; staying is the quiet one you have to mean.
                     if (showGetMeOut) {
-                        addView(pill("Get me out", p.tonal, p.accent, p) {
+                        addView(pill("Stay anyway", p.tonal, p.accent, p) { dismiss() },
+                            LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
+                        addView(pill("Get me out", p.accent, p.onAccent, p) {
                             (service as? NudgeService)?.goHome() ?: dismiss()
-                        }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
+                        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                    } else {
+                        addView(pill("OK", p.accent, p.onAccent, p) { dismiss() }, LinearLayout.LayoutParams(0, dp(48), 1f))
                     }
-                    addView(pill("OK", p.accent, p.onAccent, p) { dismiss() }, LinearLayout.LayoutParams(0, dp(48), 1f))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                     topMargin = dp(22)
                 })

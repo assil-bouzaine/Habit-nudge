@@ -29,6 +29,9 @@ object Notifier {
     const val EXTRA_OPEN_PLANNER = "openPlanner"
     const val EXTRA_ALERT_ID = "alertId"
 
+    /** Accent for the small icon and action buttons; the app's Facebook-style blue. */
+    private const val BRAND_BLUE = 0xFF1877F2.toInt()
+
     private const val TAG_GENTLE = "g"
     private const val TAG_ACTIVE = "a"
     private const val TAG_NUDGE = "n"
@@ -89,8 +92,8 @@ object Notifier {
     /** Periodic check-in while you stay in a watched app; removed when you leave it. */
     fun showStillHere(context: Context, appLabel: String, minutes: Int, showGetMeOut: Boolean) {
         val n = nudgeBuilder(
-            context, "Still here?",
-            "You've been in $appLabel for $minutes minutes. Is this still what you want to be doing?",
+            context, "Still in $appLabel?",
+            "$minutes minutes gone. That's enough. Get out.",
             showGetMeOut,
         ).build()
         nm(context).notify(TAG_NUDGE, 1, n)
@@ -99,6 +102,7 @@ object Notifier {
     private fun nudgeBuilder(context: Context, title: String, message: String, showGetMeOut: Boolean) =
         Notification.Builder(context, CH_NUDGE)
             .setSmallIcon(R.drawable.ic_notif)
+            .setColor(BRAND_BLUE)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(Notification.BigTextStyle().bigText(message))
@@ -120,6 +124,7 @@ object Notifier {
         )
         val n = Notification.Builder(context, CH_GENTLE)
             .setSmallIcon(R.drawable.ic_notif)
+            .setColor(BRAND_BLUE)
             .setContentTitle("App-open nudges are off")
             .setContentText("EMUI switched off the nudge service. Tap to turn it back on.")
             .setAutoCancel(true)
@@ -135,6 +140,7 @@ object Notifier {
     fun showGentle(context: Context, o: Occurrence) {
         val n = Notification.Builder(context, CH_GENTLE)
             .setSmallIcon(R.drawable.ic_notif)
+            .setColor(BRAND_BLUE)
             .setContentTitle(o.message)
             .setWhen(o.dueAt)
             .setShowWhen(true)
@@ -170,6 +176,7 @@ object Notifier {
         val content = if (takeover) openTakeover(context) else openApp(context, alert.opensPlanner)
         val n = Notification.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notif)
+            .setColor(BRAND_BLUE)
             .setContentTitle(alert.message)
             .setContentText(text)
             .setWhen(alert.dueAt)

@@ -7,18 +7,25 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,12 +36,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.launch
-import androidx.compose.ui.text.font.FontFamily
 import me.habitnudge.app
 import me.habitnudge.data.DiagLog
 import me.habitnudge.data.Strictness
@@ -50,8 +57,12 @@ fun HealthScreen(modifier: Modifier = Modifier) {
         refresh++
         onPauseOrDispose {}
     }
-    val items = remember(refresh) { Health.items(context) }
     val prefs = context.app.prefs
+    // Failing checks first, so what needs attention is at the top.
+    val items = remember(refresh) {
+        Health.items(context).sortedBy { it.ok ?: Health.isConfirmed(context, it) }
+    }
+    val problems = items.count { !(it.ok ?: Health.isConfirmed(context, it)) }
     val nextAt = remember(refresh) { prefs.nextAlarmAt }
     val nextLabel = remember(refresh) { prefs.nextAlarmLabel }
     // Start from the last level tested, so a restarted app doesn't silently fall back to Gentle.
@@ -59,57 +70,108 @@ fun HealthScreen(modifier: Modifier = Modifier) {
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item { ScreenHeader("Setup", "Make sure your reminders get through") }
         item {
-            Text("Setup & health", style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.padding(4.dp))
-            Text(
-                if (nextAt == 0L) "No reminder scheduled."
-                else "Next alarm: ${formatTime(nextAt)} - $nextLabel",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        items(items, key = { it.key }) { item ->
-            HealthRow(item, refresh) { refresh++ }
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
+            AppCard {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Test reminder", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Fires in 1 minute. Lock the phone and wait for it. " +
-                            "A Nagging test repeats every minute and becomes a Takeover after 3 ignored alerts. " +
-                            "A Takeover test's Done unlocks after 10 seconds.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    for (level in TESTABLE) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = testLevel == level, onClick = { testLevel = level })
-                            Text(level.label())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconBadge(
+                            if (problems == 0) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                            if (problems == 0) SuccessGreen else MaterialTheme.colorScheme.error,
+                            48.dp,
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                when (problems) {
+                                    0 -> "You're all set"
+                                    1 -> "1 thing needs attention"
+                                    else -> "$problems things need attention"
+                                },
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                if (problems == 0) "Reminders can reach you." else "Fix the items marked below.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                    Button(onClick = {
-                        scope.launch {
-                            Engine.scheduleTest(context, testLevel)
-                            refresh++
-                            Toast.makeText(context, "Test set. Lock the phone now.", Toast.LENGTH_LONG).show()
+                    HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconBadge(Icons.Filled.Notifications, MaterialTheme.colorScheme.primary, 36.dp)
+                        Spacer(Modifier.width(14.dp))
+                        Column {
+                            Text("Next alarm", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (nextAt == 0L) "Nothing scheduled" else "${formatTime(nextAt)}  ·  $nextLabel",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                         }
-                    }) { Text("Test ${testLevel.label()} reminder in 1 minute") }
+                    }
                 }
             }
         }
+
+        item { SectionLabel("Checks") }
+        items(items, key = { it.key }) { item ->
+            HealthRow(item, refresh) { refresh++ }
+        }
+
+        item { SectionLabel("Try it") }
+        item {
+            AppCard {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Test reminder", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Fires in 1 minute; lock the phone and wait. A Nagging test repeats every minute and " +
+                            "becomes a Takeover after 3 ignored alerts. A Takeover test's Done unlocks after 10 seconds.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    for (level in TESTABLE) {
+                        Row(
+                            Modifier.fillMaxWidth().selectable(selected = testLevel == level, onClick = { testLevel = level }),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = testLevel == level,
+                                onClick = null,
+                                colors = RadioButtonDefaults.colors(selectedColor = level.color()),
+                            )
+                            Text(level.label(), Modifier.padding(start = 8.dp, top = 10.dp, bottom = 10.dp), color = level.color())
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                Engine.scheduleTest(context, testLevel)
+                                refresh++
+                                Toast.makeText(context, "Test set. Lock the phone now.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) { Text("Test ${testLevel.label()} in 1 minute") }
+                }
+            }
+        }
+
+        item { SectionLabel("Reliability log") }
         item {
             val log = remember(refresh) { DiagLog.read(context).takeLast(40).asReversed() }
-            Card(Modifier.fillMaxWidth()) {
+            AppCard {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Reliability log", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "When each alarm was due vs. when it fired, newest first. LATE means over a minute late.",
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.padding(4.dp))
+                    Spacer(Modifier.height(8.dp))
                     if (log.isEmpty()) Text("Nothing yet.", style = MaterialTheme.typography.bodySmall)
                     for (line in log) {
                         Text(
@@ -120,7 +182,7 @@ fun HealthScreen(modifier: Modifier = Modifier) {
                         )
                     }
                     if (log.isNotEmpty()) {
-                        OutlinedButton(onClick = { DiagLog.clear(context); refresh++ }) { Text("Clear log") }
+                        TextButton(onClick = { DiagLog.clear(context); refresh++ }) { Text("Clear log") }
                     }
                 }
             }
@@ -133,32 +195,35 @@ private fun HealthRow(item: HealthItem, refresh: Int, onChanged: () -> Unit) {
     val context = LocalContext.current
     var confirmed by remember(item.key, refresh) { mutableStateOf(Health.isConfirmed(context, item)) }
     val good = item.ok ?: confirmed
-    val colors = if (good) CardDefaults.cardColors()
-    else CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
 
-    Card(Modifier.fillMaxWidth(), colors = colors) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (good) "OK" else "!", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.width(12.dp))
+    AppCard {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+            IconBadge(
+                if (good) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                if (good) SuccessGreen else MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
                 Text(item.title, style = MaterialTheme.typography.titleMedium)
-            }
-            Text(item.detail, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.padding(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = {
-                    if (!Health.openFix(context, item)) {
-                        Toast.makeText(context, "Couldn't open that settings page.", Toast.LENGTH_SHORT).show()
+                Text(item.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val open = {
+                        if (!Health.openFix(context, item)) {
+                            Toast.makeText(context, "Couldn't open that settings page.", Toast.LENGTH_SHORT).show()
+                        }
                     }
-                }) { Text(if (good) "Open settings" else "Fix") }
-                if (item.ok == null) {
-                    Spacer(Modifier.width(8.dp))
-                    Checkbox(checked = confirmed, onCheckedChange = {
-                        confirmed = it
-                        context.app.prefs.setConfirmed(item.key, it)
-                        onChanged()
-                    })
-                    Text("Done")
+                    if (good) FilledTonalButton(onClick = open) { Text("Settings") }
+                    else Button(onClick = open) { Text("Fix") }
+                    if (item.ok == null) {
+                        Spacer(Modifier.width(8.dp))
+                        Checkbox(checked = confirmed, onCheckedChange = {
+                            confirmed = it
+                            context.app.prefs.setConfirmed(item.key, it)
+                            onChanged()
+                        })
+                        Text("Done", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }

@@ -7,7 +7,7 @@ import me.habitnudge.HabitApp
 import me.habitnudge.notify.Notifier
 
 object Nudges {
-    const val DEFAULT_MESSAGE = "You opened {app}. Is this what you meant to do right now?"
+    const val DEFAULT_MESSAGE = "{app} again? You said you'd stop. Prove it."
 
     /** The next message in rotation, with {app} filled in. */
     suspend fun nextMessage(app: HabitApp, label: String): String {
