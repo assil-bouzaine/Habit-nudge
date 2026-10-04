@@ -31,8 +31,16 @@ object Health {
             .putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
         val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
 
-        val gentleImportance = nm.getNotificationChannel(Notifier.CH_GENTLE)?.importance
-            ?: NotificationManager.IMPORTANCE_NONE
+        fun channelItem(id: String, title: String, detail: String, minImportance: Int) = HealthItem(
+            "ch_$id", title, detail,
+            (nm.getNotificationChannel(id)?.importance ?: NotificationManager.IMPORTANCE_NONE) >= minImportance,
+            listOf(
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, id),
+                appNotifSettings,
+            ),
+        )
 
         return listOf(
             HealthItem(
@@ -41,16 +49,20 @@ object Health {
                 nm.areNotificationsEnabled(),
                 listOf(appNotifSettings, appDetails),
             ),
-            HealthItem(
-                "ch_gentle", "Gentle reminders make a sound",
-                "The \"Gentle reminders\" category must stay at default importance or higher.",
-                gentleImportance >= NotificationManager.IMPORTANCE_DEFAULT,
-                listOf(
-                    Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                        .putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
-                        .putExtra(Settings.EXTRA_CHANNEL_ID, Notifier.CH_GENTLE),
-                    appNotifSettings,
-                ),
+            channelItem(
+                Notifier.CH_GENTLE, "Gentle reminders make a sound",
+                "The \"Gentle reminders\" category must keep its sound on.",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+            channelItem(
+                Notifier.CH_STICKY, "Sticky reminders pop up",
+                "The \"Sticky reminders\" category must be set to pop up (urgent / banners).",
+                NotificationManager.IMPORTANCE_HIGH,
+            ),
+            channelItem(
+                Notifier.CH_NAG, "Nagging reminders pop up",
+                "The \"Nagging reminders\" category must be set to pop up (urgent / banners).",
+                NotificationManager.IMPORTANCE_HIGH,
             ),
             HealthItem(
                 "banners", "Banners and lock screen notifications on",

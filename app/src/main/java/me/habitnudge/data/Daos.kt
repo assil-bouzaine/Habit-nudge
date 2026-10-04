@@ -41,8 +41,11 @@ interface RuleDao {
 
 @Dao
 interface AlertDao {
-    @Query("SELECT MIN(nextNagAt) FROM active_alert")
-    suspend fun nextNagAt(): Long?
+    @Query("SELECT * FROM active_alert")
+    suspend fun all(): List<ActiveAlert>
+
+    @Query("SELECT * FROM active_alert WHERE nextNagAt IS NOT NULL ORDER BY nextNagAt LIMIT 1")
+    suspend fun nextNag(): ActiveAlert?
 
     @Query("SELECT * FROM active_alert WHERE nextNagAt <= :now")
     suspend fun nagsDue(now: Long): List<ActiveAlert>

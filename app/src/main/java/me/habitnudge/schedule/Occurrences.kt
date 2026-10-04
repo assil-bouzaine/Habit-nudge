@@ -48,7 +48,11 @@ object Occurrences {
         }
 
         val testAt = prefs.testDueAt
-        if (testAt != 0L) add(Occurrence("test:$testAt", testAt, TEST_MESSAGE, AlertStyle(prefs.testStrictness)))
+        if (testAt != 0L) {
+            // Short nag interval so a test shows repeats and escalation within a few minutes.
+            val style = AlertStyle(prefs.testStrictness, nagEveryMin = 1, escalateAfterNags = 3)
+            add(Occurrence("test:$testAt", testAt, TEST_MESSAGE, style))
+        }
 
         return out.sortedBy { it.dueAt }
     }

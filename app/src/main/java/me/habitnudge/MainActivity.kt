@@ -15,8 +15,8 @@ import me.habitnudge.ui.HealthScreen
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Re-arm on every launch, in case EMUI dropped the alarm while the app was killed.
-        lifecycleScope.launch { Engine.reschedule(applicationContext) }
+        // Re-arm on every launch, in case EMUI dropped the alarm or notifications while the app was killed.
+        lifecycleScope.launch { Engine.onAppStart(applicationContext) }
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize()) {

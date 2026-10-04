@@ -17,6 +17,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,6 +52,7 @@ fun HealthScreen(modifier: Modifier = Modifier) {
     val prefs = context.app.prefs
     val nextAt = remember(refresh) { prefs.nextAlarmAt }
     val nextLabel = remember(refresh) { prefs.nextAlarmLabel }
+    var testLevel by remember { mutableStateOf(Strictness.GENTLE) }
 
     LazyColumn(
         modifier = modifier,
@@ -74,17 +76,23 @@ fun HealthScreen(modifier: Modifier = Modifier) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Test reminder", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Fires in 1 minute. Lock the phone and wait for it.",
+                        "Fires in 1 minute. Lock the phone and wait for it. " +
+                            "A Nagging test repeats every minute and escalates after 3 ignored alerts.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Spacer(Modifier.padding(4.dp))
+                    for (level in TESTABLE) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = testLevel == level, onClick = { testLevel = level })
+                            Text(level.label())
+                        }
+                    }
                     Button(onClick = {
                         scope.launch {
-                            Engine.scheduleTest(context, Strictness.GENTLE)
+                            Engine.scheduleTest(context, testLevel)
                             refresh++
                             Toast.makeText(context, "Test set. Lock the phone now.", Toast.LENGTH_LONG).show()
                         }
-                    }) { Text("Test Gentle reminder in 1 minute") }
+                    }) { Text("Test ${testLevel.label()} reminder in 1 minute") }
                 }
             }
         }
@@ -127,6 +135,11 @@ private fun HealthRow(item: HealthItem, refresh: Int, onChanged: () -> Unit) {
         }
     }
 }
+
+// Takeover joins this list in step 3.
+private val TESTABLE = listOf(Strictness.GENTLE, Strictness.STICKY, Strictness.NAGGING)
+
+fun Strictness.label(): String = name.lowercase().replaceFirstChar { it.uppercase() }
 
 private fun formatTime(millis: Long): String =
     DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(millis))
