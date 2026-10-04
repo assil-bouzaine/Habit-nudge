@@ -34,7 +34,9 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.font.FontFamily
 import me.habitnudge.app
+import me.habitnudge.data.DiagLog
 import me.habitnudge.data.Strictness
 import me.habitnudge.schedule.Engine
 
@@ -95,6 +97,31 @@ fun HealthScreen(modifier: Modifier = Modifier) {
                             Toast.makeText(context, "Test set. Lock the phone now.", Toast.LENGTH_LONG).show()
                         }
                     }) { Text("Test ${testLevel.label()} reminder in 1 minute") }
+                }
+            }
+        }
+        item {
+            val log = remember(refresh) { DiagLog.read(context).takeLast(40).asReversed() }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Reliability log", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "When each alarm was due vs. when it fired, newest first. LATE means over a minute late.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.padding(4.dp))
+                    if (log.isEmpty()) Text("Nothing yet.", style = MaterialTheme.typography.bodySmall)
+                    for (line in log) {
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (" LATE" in line) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    if (log.isNotEmpty()) {
+                        OutlinedButton(onClick = { DiagLog.clear(context); refresh++ }) { Text("Clear log") }
+                    }
                 }
             }
         }

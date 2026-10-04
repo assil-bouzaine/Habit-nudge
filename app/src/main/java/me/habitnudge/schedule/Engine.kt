@@ -4,11 +4,14 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import java.time.LocalDate
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.habitnudge.MainActivity
 import me.habitnudge.app
 import me.habitnudge.data.ActiveAlert
+import me.habitnudge.data.DiagLog
+import me.habitnudge.nudge.NudgeService
 import me.habitnudge.data.Strictness
 import me.habitnudge.notify.Notifier
 import me.habitnudge.takeover.AlarmSound
@@ -23,6 +26,8 @@ object Engine {
     const val LATE_GRACE_MS = 30 * 60_000L
     private const val LOOKAHEAD_MS = 8 * 24 * 60 * 60_000L
     private const val TAKEOVER_RETRY_MS = 60_000L
+    /** Past days' planned reminders older than this are deleted. */
+    private const val KEEP_PLANNED_DAYS = 30L
 
     private val mutex = Mutex()
 
@@ -32,10 +37,23 @@ object Engine {
         processNags(context)
         restoreActive(context)
         scheduleNext(context)
+        checkNudgeService(context)
+    }
+
+    /** EMUI can silently switch the accessibility service off; say so once a day if apps are being watched. */
+    private suspend fun checkNudgeService(context: Context) {
+        val app = context.app
+        val today = LocalDate.now().toEpochDay()
+        if (NudgeService.isEnabled(context) || app.prefs.serviceOffWarnedDay == today) return
+        if (app.db.nudge().enabledCount() == 0) return
+        app.prefs.serviceOffWarnedDay = today
+        DiagLog.add(context, "nudge service found off")
+        Notifier.showServiceOff(context)
     }
 
     /** App opened: put back any notifications EMUI cleared, bring back a pending Takeover, and re-arm. */
     suspend fun onAppStart(context: Context) = mutex.withLock {
+        context.app.db.planned().deleteBefore(LocalDate.now().toEpochDay() - KEEP_PLANNED_DAYS)
         restoreActive(context)
         if (context.app.db.alerts().takeoverQueue().isNotEmpty() && !Takeover.inCall(context)) {
             Takeover.launch(context)

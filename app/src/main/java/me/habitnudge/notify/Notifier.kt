@@ -112,6 +112,22 @@ object Notifier {
                 }
             }
 
+    fun showServiceOff(context: Context) {
+        val fix = PendingIntent.getActivity(
+            context, 3,
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = Notification.Builder(context, CH_GENTLE)
+            .setSmallIcon(R.drawable.ic_notif)
+            .setContentTitle("App-open nudges are off")
+            .setContentText("EMUI switched off the nudge service. Tap to turn it back on.")
+            .setAutoCancel(true)
+            .setContentIntent(fix)
+            .build()
+        nm(context).notify(TAG_NUDGE, 2, n)
+    }
+
     fun cancelNudge(context: Context) = nm(context).cancel(TAG_NUDGE, 0)
 
     fun cancelStillHere(context: Context) = nm(context).cancel(TAG_NUDGE, 1)

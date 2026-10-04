@@ -27,8 +27,8 @@ android {
         // Sideloaded onto one Android 9/10 phone only: targeting 29 keeps the
         // pre-Android-12 rules for exact alarms, notifications and FGS types.
         targetSdk = 29
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "1.0"
     }
 
     signingConfigs {

@@ -31,6 +31,9 @@ interface PlannedDao {
 
     @Query("DELETE FROM planned_reminder WHERE epochDay = :day")
     suspend fun deleteDay(day: Long)
+
+    @Query("DELETE FROM planned_reminder WHERE epochDay < :day")
+    suspend fun deleteBefore(day: Long)
 }
 
 @Dao
@@ -52,6 +55,9 @@ interface RuleDao {
 interface NudgeDao {
     @Query("SELECT * FROM nudge_app ORDER BY label COLLATE NOCASE")
     fun appsFlow(): Flow<List<NudgeApp>>
+
+    @Query("SELECT COUNT(*) FROM nudge_app WHERE enabled = 1")
+    suspend fun enabledCount(): Int
 
     @Upsert
     suspend fun upsertApp(app: NudgeApp)

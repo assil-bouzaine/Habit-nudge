@@ -134,4 +134,8 @@ object Health {
     }
 
     fun isConfirmed(context: Context, item: HealthItem) = context.app.prefs.isConfirmed(item.key)
+
+    /** True if any check is failing (or a manual one isn't ticked). */
+    fun hasProblem(context: Context): Boolean =
+        items(context).any { !(it.ok ?: isConfirmed(context, it)) }
 }

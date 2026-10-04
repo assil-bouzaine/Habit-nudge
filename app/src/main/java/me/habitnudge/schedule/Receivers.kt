@@ -7,17 +7,25 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import me.habitnudge.app
+import me.habitnudge.data.DiagLog
 import me.habitnudge.notify.Notifier
 
 class AlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) =
-        runAsync { Engine.onAlarm(context.applicationContext) }
+    override fun onReceive(context: Context, intent: Intent) {
+        val app = context.applicationContext
+        DiagLog.alarm(app, app.app.prefs.nextAlarmAt, app.app.prefs.nextAlarmLabel)
+        runAsync { Engine.onAlarm(app) }
+    }
 }
 
 /** Boot, app update and clock/time-zone changes: catch up on anything missed and re-arm. */
 class SystemEventReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) =
-        runAsync { Engine.onAlarm(context.applicationContext) }
+    override fun onReceive(context: Context, intent: Intent) {
+        val app = context.applicationContext
+        DiagLog.add(app, "event ${intent.action?.substringAfterLast('.')}")
+        runAsync { Engine.onAlarm(app) }
+    }
 }
 
 /** The Done action on a Sticky/Nagging notification. */

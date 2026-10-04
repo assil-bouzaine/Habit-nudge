@@ -53,6 +53,11 @@ class Prefs(context: Context) {
         get() = sp.getInt("nudgeMessageIndex", 0)
         set(v) = sp.edit { putInt("nudgeMessageIndex", v) }
 
+    /** Day (epochDay) of the last "nudge service is off" warning, so it's at most once a day. */
+    var serviceOffWarnedDay: Long
+        get() = sp.getLong("serviceOffWarnedDay", -1L)
+        set(v) = sp.edit { putLong("serviceOffWarnedDay", v) }
+
     /** Settings the app can't read back, confirmed by hand on the health screen. */
     fun isConfirmed(key: String): Boolean = sp.getBoolean("confirmed_$key", false)
     fun setConfirmed(key: String, value: Boolean) = sp.edit { putBoolean("confirmed_$key", value) }
