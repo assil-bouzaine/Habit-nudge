@@ -4,12 +4,16 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.habitnudge.MainActivity
 import me.habitnudge.app
 import me.habitnudge.data.ActiveAlert
+import me.habitnudge.data.AlertStyle
+import me.habitnudge.data.PlannedReminder
 import me.habitnudge.data.DiagLog
 import me.habitnudge.nudge.NudgeService
 import me.habitnudge.nudge.Stats
@@ -88,6 +92,41 @@ object Engine {
         Notifier.cancelActive(context, alertId)
         Takeover.shownAt.remove(alertId)
         if (dao.takeoverQueue().isEmpty()) AlarmSound.stop()
+        scheduleNext(context)
+    }
+
+    /**
+     * "Reschedule" on a reminder: close it now and add the same reminder (message, strictness) to the
+     * planner at [at]. [alertId] is set for Sticky/Nagging/Takeover; Gentle ones pass [gentleKey] instead.
+     */
+    suspend fun rescheduleReminder(
+        context: Context,
+        at: Long,
+        alertId: Long? = null,
+        gentleKey: String? = null,
+        message: String,
+        style: AlertStyle,
+        opensPlanner: Boolean,
+    ) = mutex.withLock {
+        val app = context.app
+        if (alertId != null) {
+            app.db.alerts().delete(alertId)
+            Notifier.cancelActive(context, alertId)
+            Takeover.shownAt.remove(alertId)
+            if (app.db.alerts().takeoverQueue().isEmpty()) AlarmSound.stop()
+        }
+        gentleKey?.let { Notifier.cancelGentle(context, it) }
+        val time = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault())
+        app.db.planned().upsert(
+            PlannedReminder(
+                epochDay = time.toLocalDate().toEpochDay(),
+                minuteOfDay = time.hour * 60 + time.minute,
+                message = message,
+                style = style,
+                opensPlanner = opensPlanner,
+            ),
+        )
+        DiagLog.add(context, "rescheduled to ${time.toLocalTime().withSecond(0).withNano(0)} $message")
         scheduleNext(context)
     }
 

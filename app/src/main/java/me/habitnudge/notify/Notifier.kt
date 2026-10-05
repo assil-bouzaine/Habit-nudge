@@ -16,6 +16,7 @@ import me.habitnudge.data.Strictness
 import me.habitnudge.nudge.NudgeActionReceiver
 import me.habitnudge.schedule.DoneReceiver
 import me.habitnudge.schedule.Occurrence
+import me.habitnudge.schedule.RescheduleActivity
 import me.habitnudge.takeover.TakeoverActivity
 
 object Notifier {
@@ -147,8 +148,20 @@ object Notifier {
             .setCategory(Notification.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openApp(context, o.opensPlanner))
+            .addAction(rescheduleAction(context, RescheduleActivity.forGentle(context, o)))
             .build()
         nm(context).notify(TAG_GENTLE, o.key.hashCode(), n)
+    }
+
+    fun cancelGentle(context: Context, key: String) = nm(context).cancel(TAG_GENTLE, key.hashCode())
+
+    /** Opens the "move it to later" picker; each intent carries a unique data URI so PendingIntents don't collide. */
+    private fun rescheduleAction(context: Context, intent: Intent): Notification.Action {
+        val pi = PendingIntent.getActivity(
+            context, 0, intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notif), "Reschedule", pi).build()
     }
 
     /**
@@ -187,6 +200,7 @@ object Notifier {
             .setAutoCancel(false)
             .setContentIntent(content)
             .addAction(Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_notif), "Done", done).build())
+            .addAction(rescheduleAction(context, RescheduleActivity.forAlert(context, alert.id)))
             .apply { if (takeover && alert.nextNagAt == null) setFullScreenIntent(content, true) }
             .build()
         nm(context).notify(TAG_ACTIVE, alert.id.toInt(), n)

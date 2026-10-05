@@ -89,27 +89,31 @@ interface NudgeDao {
 
 @Dao
 interface StatsDao {
-    @Query("INSERT OR IGNORE INTO app_day_stat (day, packageName, opens, getOuts, stays, checkIns, foregroundMs) VALUES (:day, :pkg, 0, 0, 0, 0, 0)")
-    suspend fun ensure(day: Long, pkg: String)
+    @Query(
+        "INSERT OR IGNORE INTO app_day_stat (day, packageName, opens, getOuts, stays, checkIns, foregroundMs, limitMin) " +
+            "VALUES (:day, :pkg, 0, 0, 0, 0, 0, :limitMin)",
+    )
+    suspend fun ensure(day: Long, pkg: String, limitMin: Int)
 
     @Query(
         "UPDATE app_day_stat SET opens = opens + :opens, getOuts = getOuts + :getOuts, stays = stays + :stays, " +
-            "checkIns = checkIns + :checkIns, foregroundMs = foregroundMs + :ms WHERE day = :day AND packageName = :pkg",
+            "checkIns = checkIns + :checkIns, foregroundMs = foregroundMs + :ms, limitMin = :limitMin " +
+            "WHERE day = :day AND packageName = :pkg",
     )
-    suspend fun add(day: Long, pkg: String, opens: Int, getOuts: Int, stays: Int, checkIns: Int, ms: Long)
+    suspend fun add(day: Long, pkg: String, opens: Int, getOuts: Int, stays: Int, checkIns: Int, ms: Long, limitMin: Int)
 
     @Query("SELECT * FROM app_day_stat WHERE day >= :fromDay")
     fun since(fromDay: Long): Flow<List<AppDayStat>>
 
-    /** Total watched-app time per day, for the streak. */
-    @Query("SELECT day, SUM(foregroundMs) AS totalMs FROM app_day_stat WHERE day >= :fromDay GROUP BY day")
+    /** Total watched-app time per day and the limit that applied, for streaks and the calendar. */
+    @Query("SELECT day, SUM(foregroundMs) AS totalMs, MAX(limitMin) AS limitMin FROM app_day_stat WHERE day >= :fromDay GROUP BY day")
     suspend fun totalsSince(fromDay: Long): List<DayTotal>
 
     @Query("DELETE FROM app_day_stat WHERE day < :day")
     suspend fun deleteBefore(day: Long)
 }
 
-data class DayTotal(val day: Long, val totalMs: Long)
+data class DayTotal(val day: Long, val totalMs: Long, val limitMin: Int)
 
 @Dao
 interface AlertDao {

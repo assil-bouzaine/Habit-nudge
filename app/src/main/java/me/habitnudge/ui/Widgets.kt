@@ -1,6 +1,9 @@
 package me.habitnudge.ui
 
+import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import java.time.LocalDate
+import java.time.ZoneId
 import android.content.Context
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Column
@@ -43,6 +46,18 @@ fun pickTime(context: Context, initialMinute: Int, onPicked: (Int) -> Unit) {
         initialMinute / 60, initialMinute % 60,
         DateFormat.is24HourFormat(context),
     ).show()
+}
+
+/** Calendar dialog; days before today can't be picked. [initialDay] and the result are epoch days. */
+fun pickDate(context: Context, initialDay: Long, onPicked: (Long) -> Unit) {
+    val d = LocalDate.ofEpochDay(initialDay)
+    DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth -> onPicked(LocalDate.of(year, month + 1, dayOfMonth).toEpochDay()) },
+        d.year, d.monthValue - 1, d.dayOfMonth,
+    ).apply {
+        datePicker.minDate = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }.show()
 }
 
 @Composable

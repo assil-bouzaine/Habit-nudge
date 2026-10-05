@@ -20,6 +20,10 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -75,7 +79,8 @@ private fun dayDate(day: Long): String =
 
 @Composable
 fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modifier) {
-    val app = LocalContext.current.app
+    val context = LocalContext.current
+    val app = context.app
     val dao = app.db.planned()
     val reminders by remember(day) { dao.forDay(day) }.collectAsState(initial = emptyList())
     val previousCount by remember(day) { dao.countForDay(day - 1) }.collectAsState(initial = 0)
@@ -128,13 +133,35 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
                         FilledTonalIconButton(onClick = { onDayChange(day - 1) }, enabled = day > today()) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day")
                         }
-                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Tap the date to jump anywhere with a calendar.
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .clip(MaterialTheme.shapes.medium)
+                                .clickable { pickDate(context, day, onDayChange) }
+                                .padding(vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                             Text(dayTitle(day), style = MaterialTheme.typography.titleLarge)
-                            Text(dayDate(day), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.DateRange, contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(dayDate(day), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         FilledTonalIconButton(onClick = { onDayChange(day + 1) }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day")
                         }
+                    }
+                    if (!isToday) {
+                        TextButton(
+                            onClick = { onDayChange(today()) },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) { Text("Back to today") }
                     }
                 }
             }

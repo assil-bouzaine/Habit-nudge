@@ -9,6 +9,9 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import me.habitnudge.ui.RescheduleDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
@@ -80,9 +83,19 @@ class TakeoverActivity : ComponentActivity() {
                 BackHandler(enabled = true) { /* Back doesn't dismiss a Takeover. */ }
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(BrandBlue, BrandBlueDark)))) {
                     queue.firstOrNull()?.let { alert ->
-                        TakeoverCard(alert, more = queue.size - 1) {
-                            lifecycleScope.launch { Engine.done(applicationContext, alert.id) }
-                        }
+                        TakeoverCard(
+                            alert,
+                            more = queue.size - 1,
+                            onDone = { lifecycleScope.launch { Engine.done(applicationContext, alert.id) } },
+                            onReschedule = { at ->
+                                lifecycleScope.launch {
+                                    Engine.rescheduleReminder(
+                                        applicationContext, at, alertId = alert.id,
+                                        message = alert.message, style = alert.style, opensPlanner = alert.opensPlanner,
+                                    )
+                                }
+                            },
+                        )
                     }
                 }
             }
@@ -125,7 +138,7 @@ class TakeoverActivity : ComponentActivity() {
 }
 
 @Composable
-private fun TakeoverCard(alert: ActiveAlert, more: Int, onDone: () -> Unit) {
+private fun TakeoverCard(alert: ActiveAlert, more: Int, onDone: () -> Unit, onReschedule: (Long) -> Unit) {
     val unlockAt = remember(alert.id) {
         Takeover.shownAt.getOrPut(alert.id) { System.currentTimeMillis() } + alert.style.doneCountdownSec * 1000L
     }
@@ -135,6 +148,11 @@ private fun TakeoverCard(alert: ActiveAlert, more: Int, onDone: () -> Unit) {
             delay(250)
             remaining = secondsUntil(unlockAt)
         }
+    }
+
+    var rescheduling by remember(alert.id) { mutableStateOf(false) }
+    if (rescheduling) {
+        RescheduleDialog(onPick = { rescheduling = false; onReschedule(it) }, onDismiss = { rescheduling = false })
     }
 
     val soft = Color.White.copy(alpha = 0.75f)
@@ -181,6 +199,19 @@ private fun TakeoverCard(alert: ActiveAlert, more: Int, onDone: () -> Unit) {
         ) {
             Text(if (remaining > 0) "Done in $remaining" else "Done", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
+        Spacer(Modifier.height(12.dp))
+        // Same countdown as Done, so moving it later isn't an instant escape.
+        OutlinedButton(
+            onClick = { rescheduling = true },
+            enabled = remaining == 0,
+            shape = CircleShape,
+            border = BorderStroke(1.5.dp, Color.White.copy(alpha = if (remaining == 0) 0.9f else 0.35f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = Color.White,
+                disabledContentColor = Color.White.copy(alpha = 0.5f),
+            ),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text("Reschedule", fontSize = 18.sp) }
         if (more > 0) {
             Spacer(Modifier.height(16.dp))
             Text("$more more after this", color = soft)

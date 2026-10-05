@@ -37,6 +37,14 @@
             android:taskAffinity="me.habitnudge.takeover"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
+        <!-- Transparent host for the "Reschedule" picker opened from a notification. -->
+        <activity
+            android:name=".schedule.RescheduleActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="me.habitnudge.reschedule"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name=".schedule.AlarmReceiver"
             android:exported="false" />

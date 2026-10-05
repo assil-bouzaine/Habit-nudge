@@ -1,6 +1,14 @@
 package me.habitnudge.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import java.time.DayOfWeek
+import java.time.format.TextStyle
+import java.util.Locale
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -120,9 +128,55 @@ fun RecurringScreen(modifier: Modifier = Modifier) {
     }
 }
 
-private fun RecurringRule.timeSummary(): String =
-    if (intervalMin == null) "Daily at ${formatMinute(startMinute)}"
+private fun RecurringRule.timeSummary(): String {
+    val time = if (intervalMin == null) "At ${formatMinute(startMinute)}"
     else "Every $intervalMin min, ${formatMinute(startMinute)} to ${formatMinute(endMinute)}"
+    return "$time · ${daysSummary(daysMask)}"
+}
+
+/** "Every day", "Weekdays", "Weekends", or a list like "Mon, Wed, Fri". */
+fun daysSummary(mask: Int): String = when (mask) {
+    RecurringRule.EVERY_DAY -> "Every day"
+    RecurringRule.WEEKDAYS -> "Weekdays"
+    RecurringRule.WEEKENDS -> "Weekends"
+    else -> DayOfWeek.entries.filter { mask and RecurringRule.dayBit(it) != 0 }
+        .joinToString(", ") { it.getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
+}
+
+/** "Every day" shortcut plus one round toggle per weekday (Monday first). */
+@Composable
+private fun DaysPicker(mask: Int, onChange: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Days", style = MaterialTheme.typography.titleSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = mask == RecurringRule.EVERY_DAY,
+                onCheckedChange = { if (it) onChange(RecurringRule.EVERY_DAY) },
+            )
+            Text("Every day")
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            for (day in DayOfWeek.entries) {
+                val bit = RecurringRule.dayBit(day)
+                val on = mask and bit != 0
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .clickable { onChange(mask xor bit) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        day.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun RuleEditor(
@@ -136,6 +190,7 @@ private fun RuleEditor(
     val error = when {
         rule.message.isBlank() -> "Write a message."
         repeating && rule.endMinute <= rule.startMinute -> "End must be after start."
+        rule.daysMask == 0 -> "Pick at least one day."
         else -> null
     }
 
@@ -171,6 +226,7 @@ private fun RuleEditor(
                 } else {
                     TimeButton("At", rule.startMinute) { rule = rule.copy(startMinute = it, endMinute = it) }
                 }
+                DaysPicker(rule.daysMask) { rule = rule.copy(daysMask = it) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = rule.opensPlanner, onCheckedChange = { rule = rule.copy(opensPlanner = it) })
                     Text("Tapping it opens tomorrow's plan")

@@ -1,6 +1,8 @@
 package me.habitnudge.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
+import java.time.DayOfWeek
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -26,6 +28,8 @@ data class PlannedReminder(
     val minuteOfDay: Int,
     val message: String,
     @Embedded val style: AlertStyle = AlertStyle(),
+    /** Kept when a "plan tomorrow" reminder is rescheduled, so it still opens the planner. */
+    @ColumnInfo(defaultValue = "0") val opensPlanner: Boolean = false,
 )
 
 /** A daily reminder, either once at [startMinute] or every [intervalMin] within the window. */
@@ -41,10 +45,22 @@ data class RecurringRule(
     /** Tapping the reminder opens tomorrow's plan (the evening "plan tomorrow" reminder). */
     val opensPlanner: Boolean = false,
     @Embedded val style: AlertStyle = AlertStyle(),
+    /** Days it runs on: bit 0 = Monday ... bit 6 = Sunday. [EVERY_DAY] = all seven. */
+    @ColumnInfo(defaultValue = "127") val daysMask: Int = EVERY_DAY,
 ) {
     fun slotMinutes(): List<Int> =
         if (intervalMin == null || intervalMin <= 0) listOf(startMinute)
         else (startMinute..endMinute step intervalMin).toList()
+
+    fun runsOn(day: DayOfWeek): Boolean = daysMask and dayBit(day) != 0
+
+    companion object {
+        const val EVERY_DAY = 0b111_1111
+        const val WEEKDAYS = 0b001_1111
+        const val WEEKENDS = 0b110_0000
+
+        fun dayBit(day: DayOfWeek): Int = 1 shl (day.value - 1)
+    }
 }
 
 enum class NudgeStyle { CARD, NOTIFICATION }
@@ -77,6 +93,8 @@ data class AppDayStat(
     val stays: Int = 0,
     val checkIns: Int = 0,
     val foregroundMs: Long = 0,
+    /** The daily limit in force that day (so changing the limit later doesn't rewrite history); 0 = unknown. */
+    @ColumnInfo(defaultValue = "0") val limitMin: Int = 0,
 )
 
 /** A fired Sticky/Nagging/Takeover reminder that is waiting for Done. */

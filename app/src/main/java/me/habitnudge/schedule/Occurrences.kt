@@ -35,13 +35,13 @@ object Occurrences {
         }
 
         for (p in db.planned().between(firstDay.toEpochDay(), lastDay.toEpochDay())) {
-            add(Occurrence("p:${p.id}", millisAt(LocalDate.ofEpochDay(p.epochDay), p.minuteOfDay, zone), p.message, p.style))
+            add(Occurrence("p:${p.id}", millisAt(LocalDate.ofEpochDay(p.epochDay), p.minuteOfDay, zone), p.message, p.style, p.opensPlanner))
         }
 
         val rules = db.rules().enabled()
         var day = firstDay
         while (!day.isAfter(lastDay)) {
-            for (r in rules) for (m in r.slotMinutes()) {
+            for (r in rules) if (r.runsOn(day.dayOfWeek)) for (m in r.slotMinutes()) {
                 add(Occurrence("r:${r.id}:${day.toEpochDay()}:$m", millisAt(day, m, zone), r.message, r.style, r.opensPlanner))
             }
             day = day.plusDays(1)

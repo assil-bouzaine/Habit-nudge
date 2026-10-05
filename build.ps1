@@ -18,8 +18,11 @@ function Invoke-Build {
     # PowerShell 5.1 wraps each line in an error record, which garbles compiler errors.
     $err = "$log.err"
     try {
+        # Not -Wait: in PowerShell 5.1 that also waits for the Gradle daemon the build may spawn, which never exits.
         $p = Start-Process -FilePath (Join-Path $proj 'gradlew.bat') -ArgumentList 'assembleRelease', '--console=plain' `
-            -WorkingDirectory $proj -RedirectStandardOutput $log -RedirectStandardError $err -NoNewWindow -Wait -PassThru
+            -WorkingDirectory $proj -RedirectStandardOutput $log -RedirectStandardError $err -NoNewWindow -PassThru
+        $null = $p.Handle # without touching the handle first, ExitCode comes back empty
+        $p.WaitForExit()
     } finally { Pop-Location }
     Get-Content $err | Add-Content $log
     Remove-Item $err

@@ -22,26 +22,78 @@ object Stats {
         val day = LocalDate.now().toEpochDay()
         if (app.prefs.statsStartDay < 0) app.prefs.statsStartDay = day
         val dao = app.db.stats()
+        val limit = app.prefs.dailyLimitMin
         app.db.withTransaction {
-            dao.ensure(day, pkg)
-            dao.add(day, pkg, opens, getOuts, stays, checkIns, ms)
+            dao.ensure(day, pkg, limit)
+            dao.add(day, pkg, opens, getOuts, stays, checkIns, ms, limit)
         }
     }
 
-    /** Consecutive days before today with watched-app time under the limit (since stats began). */
-    suspend fun streak(app: HabitApp): Int {
-        val start = app.prefs.statsStartDay
-        if (start < 0) return 0
+    enum class DayStatus { UNDER, OVER, NOT_TRACKED, TODAY }
+
+    data class DayResult(val day: Long, val minutes: Int, val limitMin: Int, val status: DayStatus)
+
+    data class Summary(
+        val currentStreak: Int,
+        val bestStreak: Int,
+        /** Finished days (before today) since tracking began, and how many stayed under their limit. */
+        val successDays: Int,
+        val trackedDays: Int,
+        /** The last [CALENDAR_DAYS] days ending today, oldest first. */
+        val calendar: List<DayResult>,
+    )
+
+    const val CALENDAR_DAYS = 35
+
+    /**
+     * Each finished day is judged against the limit that applied that day (stored with its stats);
+     * a day with no watched-app use at all counts as under. Days before tracking began don't count.
+     */
+    suspend fun summary(app: HabitApp): Summary {
         val today = LocalDate.now().toEpochDay()
-        val limitMs = app.prefs.dailyLimitMin * 60_000L
-        val totals = app.db.stats().totalsSince(start).associate { it.day to it.totalMs }
-        var streak = 0
-        var day = today - 1
-        while (day >= start && (totals[day] ?: 0L) <= limitMs) {
-            streak++
-            day--
+        val start = app.prefs.statsStartDay
+        val currentLimit = app.prefs.dailyLimitMin
+        val firstShown = today - CALENDAR_DAYS + 1
+        val from = if (start < 0) firstShown else minOf(start, firstShown)
+        val totals = app.db.stats().totalsSince(from).associateBy { it.day }
+
+        fun result(day: Long): DayResult {
+            val t = totals[day]
+            val minutes = ((t?.totalMs ?: 0L) / 60_000L).toInt()
+            val limit = t?.limitMin?.takeIf { it > 0 } ?: currentLimit
+            val status = when {
+                day == today -> DayStatus.TODAY
+                start < 0 || day < start -> DayStatus.NOT_TRACKED
+                minutes <= limit -> DayStatus.UNDER
+                else -> DayStatus.OVER
+            }
+            return DayResult(day, minutes, limit, status)
         }
-        return streak
+
+        var success = 0
+        var tracked = 0
+        var best = 0
+        var run = 0
+        if (start >= 0) {
+            // Older days were pruned, so they can't be judged.
+            for (day in maxOf(start, today - KEEP_DAYS) until today) {
+                tracked++
+                if (result(day).status == DayStatus.UNDER) {
+                    success++
+                    run++
+                    best = maxOf(best, run)
+                } else {
+                    run = 0
+                }
+            }
+        }
+        return Summary(
+            currentStreak = run,
+            bestStreak = best,
+            successDays = success,
+            trackedDays = tracked,
+            calendar = (firstShown..today).map(::result),
+        )
     }
 }
 
