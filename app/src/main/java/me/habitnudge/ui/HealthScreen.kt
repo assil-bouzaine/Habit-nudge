@@ -14,9 +14,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
@@ -48,7 +51,7 @@ import me.habitnudge.data.Strictness
 import me.habitnudge.schedule.Engine
 
 @Composable
-fun HealthScreen(modifier: Modifier = Modifier) {
+fun HealthScreen(modifier: Modifier = Modifier, onClose: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     // Bumped on every resume (coming back from a settings screen) and after actions, to re-read state.
@@ -73,7 +76,18 @@ fun HealthScreen(modifier: Modifier = Modifier) {
         contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { ScreenHeader("Setup", "Make sure your reminders get through") }
+        item {
+            ScreenHeader(
+                "Setup",
+                "Make sure your reminders get through",
+                showGear = false,
+                leading = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        }
         item {
             AppCard {
                 Column(Modifier.padding(16.dp)) {

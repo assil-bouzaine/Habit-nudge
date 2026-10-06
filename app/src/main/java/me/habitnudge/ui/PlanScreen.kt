@@ -78,7 +78,7 @@ private fun dayDate(day: Long): String =
     LocalDate.ofEpochDay(day).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
 
 @Composable
-fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modifier) {
+fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modifier, showHeader: Boolean = true) {
     val context = LocalContext.current
     val app = context.app
     val dao = app.db.planned()
@@ -107,24 +107,26 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
             contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                if (selecting) {
-                    SelectionBar(
-                        count = selected.size,
-                        allSelected = selected.size == reminders.size,
-                        onClose = { selected = emptySet() },
-                        onSelectAll = { selected = reminders.map { it.id }.toSet() },
-                        onDelete = { confirmDelete = true },
-                    )
-                } else {
-                    ScreenHeader(
-                        "Your plan",
-                        when (reminders.size) {
-                            0 -> "Nothing planned yet"
-                            1 -> "1 reminder - long-press to select"
-                            else -> "${reminders.size} reminders - long-press to select"
-                        },
-                    )
+            if (selecting || showHeader) {
+                item {
+                    if (selecting) {
+                        SelectionBar(
+                            count = selected.size,
+                            allSelected = selected.size == reminders.size,
+                            onClose = { selected = emptySet() },
+                            onSelectAll = { selected = reminders.map { it.id }.toSet() },
+                            onDelete = { confirmDelete = true },
+                        )
+                    } else {
+                        ScreenHeader(
+                            "Your plan",
+                            when (reminders.size) {
+                                0 -> "Nothing planned yet"
+                                1 -> "1 reminder - long-press to select"
+                                else -> "${reminders.size} reminders - long-press to select"
+                            },
+                        )
+                    }
                 }
             }
             item {

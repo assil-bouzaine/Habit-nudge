@@ -26,6 +26,7 @@ GitHub: https://github.com/assil-bouzaine/Habit-nudge (public). Commit identity 
 ```
 
 - **Toolchain:** Temurin JDK 17 at `%USERPROFILE%\Android\jdk17`, SDK at `%USERPROFILE%\Android\sdk` (platform-tools, `platforms;android-35`, `build-tools;35.0.0`).
+- **On Linux (current machine):** JDK 17 from pacman, SDK at `~/Android/sdk` — `export ANDROID_HOME=~/Android/sdk`, add `platform-tools` to PATH, then `./gradlew assembleRelease` and `adb install -r app/build/outputs/apk/release/app-release.apk`. Signing still comes from the git-ignored `keystore.properties`; keys at `~/Android/keys/habitnudge.jks`.
 - **Pinned versions:** AGP 8.7.3, Gradle 8.11.1 (wrapper), Kotlin 2.0.21, KSP 2.0.21-1.0.28, Compose BOM 2024.12.01, Room 2.6.1.
 - **SDK levels:** `minSdk 28`, `targetSdk 29` (deliberate: the older rules for exact alarms, notifications and background activity starts), `compileSdk 35`.
 - **Signing:** release builds are minified (R8) and signed from git-ignored `keystore.properties`. The key is at `%USERPROFILE%\Android\keys\habitnudge.jks`, outside the repo. Losing it means uninstalling, and so losing data, to update.
@@ -51,13 +52,13 @@ Single module `app`, package `me.habitnudge`, Kotlin + Jetpack Compose (Material
 
 ```
 HabitApp.kt          Application: db, prefs, app-wide coroutine scope, creates notification channels
-MainActivity.kt      Edge-to-edge Compose host; seeds defaults; Engine.onAppStart; opens Plan from the plan-tomorrow reminder
-data/                Entities, DAOs, AppDatabase (auto-migrations), Prefs, Seed, DiagLog (reliability log)
+MainActivity.kt      Edge-to-edge Compose host; seeds defaults; Engine.onAppStart; opens Reminders from the plan-tomorrow reminder
+data/                Entities, DAOs, AppDatabase (auto-migrations), Prefs, Seed, NoteAuth (notes PIN), DiagLog (reliability log)
 schedule/            Engine, Occurrences, receivers (alarm, boot/time, Done), RescheduleActivity
 notify/Notifier.kt   Channels (gentle_v1, sticky_v1, nag_v1, takeover_v1, nudge_v1) and all notification builders
 takeover/            TakeoverActivity (full-screen card), Takeover helpers, AlarmSound
 nudge/               NudgeService (accessibility), NudgeCard (overlay views), Nudges (messages), Stats + Bedtime
-ui/                  Screens: Plan, Recurring, Nudge, Stats, Setup (HealthScreen); Theme, Components, Widgets, RescheduleDialog
+ui/                  Screens: Reminders (Plan + Recurring behind a segmented control), Nudge, Stats, Notes, Setup (HealthScreen, reached via the gear in every ScreenHeader); Theme, Components, Widgets, RescheduleDialog
 ```
 
 ### Scheduling (`schedule/Engine.kt`)
@@ -109,6 +110,14 @@ ui/                  Screens: Plan, Recurring, Nudge, Stats, Setup (HealthScreen
   - check-ins every 5 minutes as that same card
 - **Stats** recorded per app per day: opens, Get me out taps, Stay taps, check-ins, foreground time, and that day's limit.
 
+### Notes (`ui/NotesScreen.kt`, `data/NoteAuth.kt`)
+
+- **Two kinds:** regular notes (always visible) and secret notes (PIN-protected). Only regular notes get reminders — the editor hides the reminder options for secrets.
+- **PIN:** SHA-256 hash in `Prefs.notesAuthPin`, stored by `NoteAuth`; **no recovery** (losing it hides the secrets forever). An unlock lasts **60 seconds** (`NoteAuth.SESSION_DURATION_MS`), then secrets hide on their own.
+- **Hiding:** the lock glyph in the Notes header switches views — locked shows regular notes only, unlocked shows **secret notes alone** (never mixed). While unlocked, "+" defaults to a secret note. There is deliberately no "Secret Notes" section that reveals private notes exist.
+- **Reminders:** optional per regular note — every N days at a set time, any strictness (default Gentle), with Pause/Resume on the card (`ReminderConfig.isPaused`). Occurrence key `note:<id>:<epochDay>`; `Occurrences.generateNoteReminders` creates the window and `Engine.advanceNoteReminder` fires one and rolls `nextReminderEpochDay` forward. Deleting the note removes its reminder.
+- **List vs editor:** the list clamps content to one line with an ellipsis; the editor shows it in full.
+
 ### Data (Room, `app/schemas/` exported)
 
 | Version | Change |
@@ -118,6 +127,7 @@ ui/                  Screens: Plan, Recurring, Nudge, Stats, Setup (HealthScreen
 | v3 | nudge_app.cooldownMin → checkInMin (rename + set 15) |
 | v4 | app_day_stat |
 | v5 | recurring_rule.daysMask (bit 0 = Mon … bit 6 = Sun, 127 = every day), app_day_stat.limitMin, planned_reminder.opensPlanner |
+| v6 | note (content, isSecret, timestamps, optional embedded reminder_config: intervalDays, timeOfDay, isPaused, nextReminderEpochDay, strictness) |
 
 **Always add a migration**, normally an `AutoMigration`. Never use destructive migration: the user's data lives only on the phone. Seeding happens once and is tracked by `Prefs` flags (`seeded`, `seededNudge`, `seededRuthless`).
 
@@ -126,7 +136,7 @@ ui/                  Screens: Plan, Recurring, Nudge, Stats, Setup (HealthScreen
 ### UI conventions
 
 - **Colours:** brand blue `#1877F2` (`BrandBlue` in `ui/Theme.kt`), with light and dark schemes.
-- **Shared components:** white `AppCard`s on a tinted background, `ScreenHeader`, `Pill`, `StrictnessPill`, `IconBadge`, `SectionLabel`, `EmptyState` (`ui/Components.kt`).
+- **Shared components:** white `AppCard`s on a tinted background, `ScreenHeader` (title-line-aligned icons: `leading` slot e.g. a back arrow, `trailing` slot e.g. the Notes lock, plus the Setup gear with its red dot unless `showGear = false`), `Pill`, `StrictnessPill`, `IconBadge`, `SectionLabel`, `EmptyState` (`ui/Components.kt`).
 - **Strictness colours:** Gentle green, Sticky blue, Nagging amber, Takeover red.
 - **Icons:** only the `material-icons-core` set is available (no extended icons), so emoji are used where no core icon fits (🌙 🔥 🏆).
 - **Status never by colour alone:** charts follow the dataviz rules, with a glyph or legend for every status colour.
@@ -145,6 +155,8 @@ ui/                  Screens: Plan, Recurring, Nudge, Stats, Setup (HealthScreen
 - **Nudge cooldown:** the "10-minute per-app cooldown" was replaced by "nudge on every real open, plus Still-here check-ins".
 - **Message tone:** gentle messages were replaced by ruthless ones (custom messages kept). The card says "REALITY CHECK" with **Stay anyway** (quiet) and **Get me out** (bold).
 - **History:** "no history in v1" was replaced by the Stats tab.
+- **Notes:** secret notes exist but are **hidden** — no visible "Secret Notes" section; a lock glyph in the header switches between the regular list and the secrets-alone view, re-locking after 60 s. Secrets can't have reminders. No PIN recovery.
+- **Navigation:** 6 bottom tabs → **4** (Reminders merges Plan + Recurring behind a segmented control; Setup lives behind a gear in every `ScreenHeader`).
 
 ## History (what was built, in order)
 
@@ -158,10 +170,15 @@ ui/                  Screens: Plan, Recurring, Nudge, Stats, Setup (HealthScreen
 8. **Reliability:** rolling reliability log, once-a-day service-off warning, Setup red dot, launcher icon, v1.0. Under forced deep Doze, Gentle and Takeover both fired 0 s late.
 9. **Blue Material 3 redesign;** multi-select delete in the planner; ruthless messages; the fix for returning from recents.
 10. **Bedtime mode + Stats tab** (streak, 7-day chart, per-app today).
-11. **This round:**
+11. **Reschedule + planner round:**
     - Reschedule on reminders and the Takeover card
     - days of the week for recurring rules
     - calendar date picker on the Plan tab
     - Stats redesign: current, best and success tiles; a 35-day success calendar; red over-limit bars; per-day limit history
+12. **Notes feature:** regular notes with optional every-N-days reminders (any strictness, pause/resume) and hidden PIN-protected secret notes; Room v6, `NoteAuth`, occurrence keys `note:<id>:<epochDay>`.
+13. **This round:**
+    - Notes polish: one-line note rows, Pause/Resume as a text button beside the bin, secrets shown alone after unlock (60 s session)
+    - Navigation: 6 tabs → 4; Plan + Recurring merged behind a segmented control (`RemindersScreen`); Setup behind a gear in every header (`LocalSetup`, `showSetup`, back arrow on the left)
+    - `ScreenHeader` gained `leading`/`trailing` slots with title-line alignment
 
 **Not yet done:** the reboot test (a Sticky surviving a restart) was never run on the phone, and there's been no 24-hour reliability run with the log pulled afterwards.

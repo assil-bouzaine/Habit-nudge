@@ -4,7 +4,9 @@ import java.security.MessageDigest
 
 /** Authentication helper for secret notes with PIN/password protection. */
 object NoteAuth {
-    private const val SESSION_DURATION_MS = 30 * 60 * 1000L // 30 minutes
+    // Short on-purpose: the app spends most of its life in the background, so don't
+    // hold the secret state open. 60s is enough to read/write a note, then it re-locks.
+    private const val SESSION_DURATION_MS = 60_000L
 
     /** Hash PIN/password using SHA-256. */
     fun hashPin(pin: String): String {

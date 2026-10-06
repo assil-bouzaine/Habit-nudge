@@ -54,7 +54,7 @@ import me.habitnudge.data.RecurringRule
 import me.habitnudge.schedule.Engine
 
 @Composable
-fun RecurringScreen(modifier: Modifier = Modifier) {
+fun RecurringScreen(modifier: Modifier = Modifier, showHeader: Boolean = true) {
     val context = LocalContext.current
     val app = context.app
     val rules by app.db.rules().all().collectAsState(initial = emptyList())
@@ -75,9 +75,11 @@ fun RecurringScreen(modifier: Modifier = Modifier) {
             contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                val on = rules.count { it.enabled }
-                ScreenHeader("Recurring", if (rules.isEmpty()) "Reminders that repeat every day" else "$on of ${rules.size} on")
+            if (showHeader) {
+                item {
+                    val on = rules.count { it.enabled }
+                    ScreenHeader("Recurring", if (rules.isEmpty()) "Reminders that repeat every day" else "$on of ${rules.size} on")
+                }
             }
             if (rules.isEmpty()) {
                 item { EmptyState("🔁", "Nothing repeating", "Add things like \"drink water\" every 90 minutes.") }

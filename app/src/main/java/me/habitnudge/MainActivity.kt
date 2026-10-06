@@ -21,7 +21,7 @@ import me.habitnudge.ui.defaultPlanDay
 import me.habitnudge.ui.today
 
 class MainActivity : ComponentActivity() {
-    private var tab by mutableStateOf(Tab.PLAN)
+    private var tab by mutableStateOf(Tab.REMINDERS)
     private var planDay by mutableLongStateOf(defaultPlanDay())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
     /** The evening "plan tomorrow" reminder opens straight into the planner. */
     private fun handleIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(Notifier.EXTRA_OPEN_PLANNER, false) == true) {
-            tab = Tab.PLAN
+            tab = Tab.REMINDERS
             planDay = today() + 1
         }
     }

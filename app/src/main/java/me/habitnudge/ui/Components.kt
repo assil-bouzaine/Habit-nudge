@@ -9,13 +9,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,13 +36,46 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.habitnudge.data.Strictness
 
-/** Big screen title with an optional muted line under it. */
+/**
+ * Big screen title with an optional muted line under it, a [leading] slot (e.g. a back
+ * arrow on the left), a [trailing] slot (e.g. the private-notes lock) and the Setup gear —
+ * which carries the red dot when a check is off. Icons line up with the title line.
+ */
 @Composable
-fun ScreenHeader(title: String, subtitle: String? = null) {
-    Column(Modifier.padding(start = 4.dp, top = 12.dp, bottom = 4.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium)
-        subtitle?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun ScreenHeader(
+    title: String,
+    subtitle: String? = null,
+    showGear: Boolean = true,
+    leading: @Composable RowScope.() -> Unit = {},
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
+    val setup = LocalSetup.current
+    Row(
+        Modifier.padding(start = 4.dp, top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        leading()
+        Column(Modifier.weight(1f).padding(top = 6.dp)) {
+            Text(title, style = MaterialTheme.typography.headlineMedium)
+            subtitle?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        trailing()
+        if (showGear && setup != null) {
+            IconButton(onClick = setup.open) {
+                if (setup.problem) {
+                    BadgedBox(badge = { Badge() }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Setup")
+                    }
+                } else {
+                    Icon(
+                        Icons.Filled.Settings,
+                        contentDescription = "Setup",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

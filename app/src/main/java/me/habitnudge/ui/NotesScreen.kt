@@ -1,32 +1,82 @@
 package me.habitnudge.ui
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.habitnudge.app
-import me.habitnudge.data.*
+import me.habitnudge.data.AlertStyle
+import me.habitnudge.data.Note
+import me.habitnudge.data.NoteAuth
+import me.habitnudge.data.ReminderConfig
+import me.habitnudge.data.Strictness
 import me.habitnudge.schedule.Engine
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
-import kotlin.math.abs
 
 @Composable
-fun NotesScreen() {
+fun NotesScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val app = context.app
     val scope = rememberCoroutineScope()
@@ -41,149 +91,107 @@ fun NotesScreen() {
     var editingNote by remember { mutableStateOf<Note?>(null) }
     var noteToDelete by remember { mutableStateOf<Note?>(null) }
 
-    // Refresh auth state
-    LaunchedEffect(Unit) {
-        isSecretUnlocked = NoteAuth.isAuthenticated(app.prefs)
+    // The secret session is short (60s): once it lapses, re-lock even if the screen is still up.
+    LaunchedEffect(isSecretUnlocked) {
+        if (isSecretUnlocked) {
+            val left = app.prefs.notesAuthenticatedUntil - System.currentTimeMillis()
+            if (left > 0) {
+                delay(left)
+                isSecretUnlocked = NoteAuth.isAuthenticated(app.prefs)
+            }
+        }
     }
 
-    fun onUnlockClick() {
+    fun onLockClick() {
         if (!NoteAuth.isPinConfigured(app.prefs)) {
             showPinSetupDialog = true
+        } else if (isSecretUnlocked) {
+            NoteAuth.clearSession(app.prefs)
+            isSecretUnlocked = false
         } else {
             showPinEntryDialog = true
         }
     }
 
-    fun onNewNoteClick(secret: Boolean) {
-        if (secret && !NoteAuth.isPinConfigured(app.prefs)) {
-            showPinSetupDialog = true
-        } else {
-            editingNote = Note(
-                id = 0,
-                content = "",
-                isSecret = secret,
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
-            )
-            showNoteEditor = true
+    fun openNewNote() {
+        // In the private view a new note defaults to secret so it shows where you are.
+        editingNote = Note(
+            id = 0, content = "", isSecret = isSecretUnlocked,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+        )
+        showNoteEditor = true
+    }
+
+    fun togglePause(note: Note) {
+        val config = note.reminderConfig ?: return
+        scope.launch {
+            app.db.note().update(note.copy(reminderConfig = config.copy(isPaused = !config.isPaused)))
+            Engine.reschedule(context)
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        ScreenHeader("Notes")
+    // Locked = regular notes only; unlocked = secret notes alone (never mixed).
+    val visibleNotes = if (isSecretUnlocked) secretNotes else regularNotes
 
+    Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // Header: title + a discreet lock, then the Setup gear (from ScreenHeader).
             item {
-                AppCard(onClick = { onNewNoteClick(false) }) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("New Note", style = MaterialTheme.typography.titleMedium)
+                ScreenHeader("Notes", if (isSecretUnlocked) "Private" else null) {
+                    IconButton(onClick = ::onLockClick) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Private notes",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (isSecretUnlocked) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline,
+                        )
                     }
                 }
             }
 
-            item { SectionLabel("Regular Notes") }
-
-            if (regularNotes.isEmpty()) {
+            if (visibleNotes.isEmpty()) {
                 item {
-                    EmptyState(
-                        emoji = "📝",
-                        title = "No notes yet",
-                        body = "Tap 'New Note' to create your first note"
-                    )
-                }
-            } else {
-                items(regularNotes, key = { it.id }) { note ->
-                    NoteCard(
-                        note = note,
-                        onClick = {
-                            editingNote = note
-                            showNoteEditor = true
-                        },
-                        onDelete = { noteToDelete = note }
-                    )
-                }
-            }
-
-            item { SectionLabel("Secret Notes") }
-
-            if (!isSecretUnlocked) {
-                item {
-                    AppCard(onClick = ::onUnlockClick) {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text("Secret Notes", style = MaterialTheme.typography.titleMedium)
-                            Button(onClick = ::onUnlockClick) {
-                                Text("Unlock Secret Notes")
-                            }
-                        }
-                    }
-                }
-            } else {
-                if (secretNotes.isEmpty()) {
-                    item {
+                    if (isSecretUnlocked) {
                         EmptyState(
                             emoji = "🔒",
-                            title = "No secret notes",
-                            body = "Create a secret note to keep private information secure"
+                            title = "No private notes yet",
+                            body = "Tap + and choose Secret to write one",
                         )
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    item {
-                        AppCard(onClick = { onNewNoteClick(true) }) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("New Secret Note", style = MaterialTheme.typography.titleMedium)
-                            }
-                        }
-                    }
-                } else {
-                    items(secretNotes, key = { it.id }) { note ->
-                        NoteCard(
-                            note = note,
-                            onClick = {
-                                editingNote = note
-                                showNoteEditor = true
-                            },
-                            onDelete = { noteToDelete = note }
+                    } else {
+                        EmptyState(
+                            emoji = "📝",
+                            title = "No notes yet",
+                            body = "Tap + to write your first note",
                         )
                     }
                 }
+            } else {
+                items(visibleNotes, key = { it.id }) { note ->
+                    NoteCard(
+                        note = note,
+                        onClick = { editingNote = note; showNoteEditor = true },
+                        onDelete = { noteToDelete = note },
+                        onTogglePause = { togglePause(note) },
+                    )
+                }
             }
 
-            item { Spacer(Modifier.height(16.dp)) }
+            item { Spacer(Modifier.height(88.dp)) }
+        }
+
+        // New note FAB: tap it, write, then choose regular/secret and reminders inside the editor.
+        FloatingActionButton(
+            onClick = ::openNewNote,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "New note")
         }
     }
 
@@ -191,11 +199,11 @@ fun NotesScreen() {
         PinSetupDialog(
             onPinSet = { pin ->
                 NoteAuth.setPin(pin, app.prefs)
+                NoteAuth.authenticate(pin, app.prefs)
                 showPinSetupDialog = false
                 isSecretUnlocked = true
-                NoteAuth.authenticate(pin, app.prefs)
             },
-            onDismiss = { showPinSetupDialog = false }
+            onDismiss = { showPinSetupDialog = false },
         )
     }
 
@@ -210,35 +218,35 @@ fun NotesScreen() {
                     false
                 }
             },
-            onDismiss = { showPinEntryDialog = false }
+            onDismiss = { showPinEntryDialog = false },
         )
     }
 
     if (showNoteEditor && editingNote != null) {
         NoteEditorDialog(
             note = editingNote,
+            onNeedPin = {
+                if (!NoteAuth.isPinConfigured(app.prefs)) showPinSetupDialog = true
+            },
             onSave = { note ->
                 scope.launch {
-                    val hasReminder = note.reminderConfig != null
+                    var willReschedule = note.reminderConfig != null
                     if (note.id == 0L) {
                         app.db.note().insert(note)
                     } else {
+                        willReschedule = willReschedule || editingNote?.reminderConfig != null
                         app.db.note().update(note)
                     }
-                    if (hasReminder || editingNote?.reminderConfig != null) {
-                        Engine.reschedule(context)
-                    }
+                    if (willReschedule) Engine.reschedule(context)
                     showNoteEditor = false
                     editingNote = null
                 }
             },
-            onDelete = if (editingNote?.id != 0L) {
-                { noteToDelete = editingNote }
-            } else null,
+            onDelete = if (editingNote?.id != 0L) ({ noteToDelete = editingNote }) else null,
             onDismiss = {
                 showNoteEditor = false
                 editingNote = null
-            }
+            },
         )
     }
 
@@ -246,189 +254,185 @@ fun NotesScreen() {
         AlertDialog(
             onDismissRequest = { noteToDelete = null },
             title = { Text("Delete note?") },
-            text = { Text("This action cannot be undone.") },
+            text = { Text("This can't be undone.") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         scope.launch {
                             val hadReminder = noteToDelete?.reminderConfig != null
                             app.db.note().delete(noteToDelete!!)
-                            if (hadReminder) {
-                                Engine.reschedule(context)
-                            }
+                            if (hadReminder) Engine.reschedule(context)
                             noteToDelete = null
                             showNoteEditor = false
                             editingNote = null
                         }
-                    }
-                ) {
-                    Text("Delete")
-                }
+                    },
+                ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { noteToDelete = null }) {
-                    Text("Cancel")
-                }
-            }
+                TextButton(onClick = { noteToDelete = null }) { Text("Cancel") }
+            },
         )
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun NoteCard(
-    note: Note,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
+fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePause: () -> Unit) {
     AppCard(onClick = onClick, onLongClick = onDelete) {
         Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (note.isSecret) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            // One line only: the list is a list, the editor shows the full text.
+            Text(
+                note.content,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            // Row 1: reminder info (left) and age (right).
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (note.isSecret) {
                     Icon(
                         Icons.Default.Lock,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "Secret",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        modifier = Modifier.size(13.dp),
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                 }
-            }
 
-            Text(
-                note.content,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            note.reminderConfig?.let { config ->
-                if (!config.isPaused) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                note.reminderConfig?.let { config ->
+                    if (config.isPaused) {
+                        Pill("Paused", MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
                         Icon(
                             Icons.Default.Notifications,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            "Every ${config.intervalDays} day${if (config.intervalDays > 1) "s" else ""}",
+                            "Every ${config.intervalDays}d · ${formatTime(config.timeOfDay)}",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false,
+                            modifier = Modifier.weight(1f, fill = false),
                         )
                         StrictnessPill(config.style.strictness)
                     }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                Text(
+                    formatRelativeTime(note.updatedAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+
+            // Row 2: controls right-aligned — Pause/Resume never competes with the pills.
+            if (note.reminderConfig != null) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    TextButton(
+                        onClick = onTogglePause,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     ) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        Text(
+                            if (note.reminderConfig!!.isPaused) "Resume" else "Pause",
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            softWrap = false,
                         )
-                        Pill("Paused", MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FilledTonalIconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(15.dp))
+                    }
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilledTonalIconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(15.dp))
                     }
                 }
             }
-
-            Text(
-                formatRelativeTime(note.updatedAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
 
+/** Compact "09:00" for a minute-of-day value. */
+fun formatTime(minuteOfDay: Int): String =
+    String.format("%02d:%02d", minuteOfDay / 60, minuteOfDay % 60)
+
 fun formatRelativeTime(timestamp: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-    val seconds = diff / 1000
-    val minutes = seconds / 60
+    val diff = System.currentTimeMillis() - timestamp
+    val minutes = diff / 60_000
     val hours = minutes / 60
     val days = hours / 24
-
     return when {
-        seconds < 60 -> "Just now"
-        minutes < 60 -> "$minutes minute${if (minutes > 1) "s" else ""} ago"
-        hours < 24 -> "$hours hour${if (hours > 1) "s" else ""} ago"
-        days < 7 -> "$days day${if (days > 1) "s" else ""} ago"
-        else -> {
-            val weeks = days / 7
-            "$weeks week${if (weeks > 1) "s" else ""} ago"
-        }
+        minutes < 1 -> "Just now"
+        minutes < 60 -> "${minutes}m ago"
+        hours < 24 -> "${hours}h ago"
+        days < 7 -> "${days}d ago"
+        else -> "${days / 7}w ago"
     }
 }
 
 @Composable
-fun PinSetupDialog(
-    onPinSet: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
+fun PinSetupDialog(onPinSet: (String) -> Unit, onDismiss: () -> Unit) {
     var pin by remember { mutableStateOf("") }
-    var confirmPin by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set up PIN") },
+        title = { Text("Set a PIN") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Set a PIN to protect your secret notes. You'll need this PIN to view them. There is no recovery if you forget it.",
+                    "Secret notes stay on this phone under a PIN. There is no way to recover it if you forget.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = {
-                        pin = it
-                        error = null
-                    },
-                    label = { Text("Enter PIN") },
+                    onValueChange = { pin = it; error = null },
+                    label = { Text("PIN") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
-                    isError = error != null
+                    isError = error != null,
                 )
-
                 OutlinedTextField(
-                    value = confirmPin,
-                    onValueChange = {
-                        confirmPin = it
-                        error = null
-                    },
+                    value = confirm,
+                    onValueChange = { confirm = it; error = null },
                     label = { Text("Confirm PIN") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
-                    isError = error != null
+                    isError = error != null,
                 )
-
                 error?.let {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelMedium
-                    )
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
                 }
             }
         },
@@ -437,27 +441,18 @@ fun PinSetupDialog(
                 onClick = {
                     when {
                         pin.length < 4 -> error = "PIN must be at least 4 characters"
-                        pin != confirmPin -> error = "PINs don't match"
+                        pin != confirm -> error = "PINs don't match"
                         else -> onPinSet(pin)
                     }
-                }
-            ) {
-                Text("Set PIN")
-            }
+                },
+            ) { Text("Set PIN") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
 @Composable
-fun PinEntryDialog(
-    onAuthenticate: (String) -> Boolean,
-    onDismiss: () -> Unit
-) {
+fun PinEntryDialog(onAuthenticate: (String) -> Boolean, onDismiss: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
 
@@ -465,31 +460,21 @@ fun PinEntryDialog(
         onDismissRequest = onDismiss,
         title = { Text("Enter PIN") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "Enter your PIN to unlock secret notes",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
+            Column {
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = {
-                        pin = it
-                        error = false
-                    },
+                    onValueChange = { pin = it; error = false },
                     label = { Text("PIN") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
-                    isError = error
+                    isError = error,
                 )
-
                 if (error) {
                     Text(
                         "Incorrect PIN",
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelMedium,
                     )
                 }
             }
@@ -497,162 +482,139 @@ fun PinEntryDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (!onAuthenticate(pin)) {
-                        error = true
-                        pin = ""
-                    }
-                }
-            ) {
-                Text("Unlock")
-            }
+                    if (!onAuthenticate(pin)) { error = true; pin = "" }
+                },
+            ) { Text("Unlock") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
 @Composable
 fun NoteEditorDialog(
     note: Note?,
+    onNeedPin: () -> Unit,
     onSave: (Note) -> Unit,
     onDelete: (() -> Unit)?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     var content by remember { mutableStateOf(note?.content ?: "") }
-    var isSecret by remember { mutableStateOf(note?.isSecret ?: false) }
+    var secretToggle by remember { mutableStateOf(note?.isSecret ?: false) }
     var hasReminder by remember { mutableStateOf(note?.reminderConfig != null) }
     var intervalDays by remember { mutableStateOf(note?.reminderConfig?.intervalDays ?: 1) }
     var timeOfDay by remember { mutableStateOf(note?.reminderConfig?.timeOfDay ?: (9 * 60)) }
     var isPaused by remember { mutableStateOf(note?.reminderConfig?.isPaused ?: false) }
     var strictness by remember { mutableStateOf(note?.reminderConfig?.style?.strictness ?: Strictness.GENTLE) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 600.dp)
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth().heightIn(max = 720.dp),
         ) {
             Column(
                 Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    if (note?.id == 0L) "New Note" else "Edit Note",
-                    style = MaterialTheme.typography.headlineSmall
+                    if (note?.id == 0L) "New note" else "Edit note",
+                    style = MaterialTheme.typography.headlineSmall,
                 )
 
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text("Note content") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 200.dp),
-                    maxLines = 10
+                    label = { Text("Note") },
+                    placeholder = { Text("Start typing…") },
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 120.dp),
+                    maxLines = 10,
                 )
 
+                // Regular / Secret selector.
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Checkbox(
-                        checked = isSecret,
-                        onCheckedChange = {
-                            isSecret = it
-                            if (it) {
-                                hasReminder = false
-                            }
-                        }
+                    SegmentedCard(
+                        modifier = Modifier.weight(1f),
+                        label = "Regular",
+                        selected = !secretToggle,
+                        onClick = { secretToggle = false },
                     )
-                    Text("Secret note (no reminders allowed)")
+                    SegmentedCard(
+                        modifier = Modifier.weight(1f),
+                        label = "Secret",
+                        selected = secretToggle,
+                        onClick = {
+                            secretToggle = true
+                            onNeedPin()
+                        },
+                    )
                 }
 
-                if (!isSecret) {
+                if (secretToggle) {
+                    Text(
+                        "Hidden behind your PIN; can't have reminders.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                if (!secretToggle) {
                     HorizontalDivider()
 
                     Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Checkbox(
-                            checked = hasReminder,
-                            onCheckedChange = { hasReminder = it }
-                        )
-                        Text("Enable reminder")
+                        Text("Reminder", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        Switch(checked = hasReminder, onCheckedChange = { hasReminder = it })
                     }
 
                     if (hasReminder) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Every")
+                                Text("Every", style = MaterialTheme.typography.bodyMedium)
                                 OutlinedTextField(
                                     value = intervalDays.toString(),
-                                    onValueChange = {
-                                        intervalDays = it.toIntOrNull()?.coerceIn(1, 365) ?: 1
-                                    },
-                                    modifier = Modifier.width(80.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    onValueChange = { intervalDays = it.toIntOrNull()?.coerceIn(1, 365) ?: 1 },
+                                    modifier = Modifier.width(72.dp),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 )
-                                Text("day${if (intervalDays > 1) "s" else ""}")
+                                Text(
+                                    if (intervalDays == 1) "day" else "days",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
                             }
 
-                            val hours = timeOfDay / 60
-                            val minutes = timeOfDay % 60
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            OutlinedButton(
+                                onClick = { showTimePicker = true },
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Text("At")
-                                OutlinedTextField(
-                                    value = String.format("%02d", hours),
-                                    onValueChange = {
-                                        val h = it.toIntOrNull()?.coerceIn(0, 23) ?: hours
-                                        timeOfDay = h * 60 + minutes
-                                    },
-                                    modifier = Modifier.width(70.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-                                Text(":")
-                                OutlinedTextField(
-                                    value = String.format("%02d", minutes),
-                                    onValueChange = {
-                                        val m = it.toIntOrNull()?.coerceIn(0, 59) ?: minutes
-                                        timeOfDay = hours * 60 + m
-                                    },
-                                    modifier = Modifier.width(70.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
+                                Text("Remind at ${formatTime(timeOfDay)}", style = MaterialTheme.typography.bodyMedium)
                             }
 
-                            Text("Strictness", style = MaterialTheme.typography.labelMedium)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Strictness.entries.forEach { s ->
-                                    FilterChip(
-                                        selected = strictness == s,
-                                        onClick = { strictness = s },
-                                        label = { Text(s.label()) }
-                                    )
-                                }
-                            }
+                            Text("Strictness", style = MaterialTheme.typography.labelLarge)
+                            StrictnessSelector(strictness = strictness, onSelect = { strictness = it })
 
                             if (note?.reminderConfig != null) {
                                 Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Checkbox(
-                                        checked = isPaused,
-                                        onCheckedChange = { isPaused = it }
-                                    )
-                                    Text("Paused")
+                                    Text("Pause reminders", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                    Switch(checked = isPaused, onCheckedChange = { isPaused = it })
                                 }
                             }
                         }
@@ -661,52 +623,122 @@ fun NoteEditorDialog(
 
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (onDelete != null) {
-                        IconButton(onClick = {
-                            onDismiss()
-                            onDelete()
-                        }) {
+                        IconButton(onClick = { onDismiss(); onDelete() }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
                     Button(
                         onClick = {
-                            val reminderConfig = if (hasReminder && !isSecret) {
-                                val nextDay = if (note?.reminderConfig != null) {
-                                    note.reminderConfig.nextReminderEpochDay
-                                } else {
-                                    LocalDate.now().toEpochDay()
-                                }
+                            val cfg = if (hasReminder && !secretToggle) {
+                                val nextDay = note?.reminderConfig?.nextReminderEpochDay ?: LocalDate.now().toEpochDay()
                                 ReminderConfig(
                                     intervalDays = intervalDays,
                                     timeOfDay = timeOfDay,
                                     isPaused = isPaused,
                                     nextReminderEpochDay = nextDay,
-                                    style = AlertStyle(strictness = strictness)
+                                    style = AlertStyle(strictness = strictness),
                                 )
                             } else null
-
                             onSave(
                                 Note(
                                     id = note?.id ?: 0,
                                     content = content,
-                                    isSecret = isSecret,
+                                    isSecret = secretToggle,
                                     createdAt = note?.createdAt ?: System.currentTimeMillis(),
                                     updatedAt = System.currentTimeMillis(),
-                                    reminderConfig = reminderConfig
-                                )
+                                    reminderConfig = cfg,
+                                ),
                             )
                         },
-                        enabled = content.isNotBlank()
-                    ) {
-                        Text("Save")
-                    }
+                        enabled = content.isNotBlank(),
+                        modifier = Modifier.defaultMinSize(minWidth = 88.dp),
+                    ) { Text("Save") }
+                }
+            }
+        }
+    }
+
+    if (showTimePicker) {
+        TimePickerDialog(
+            initial = timeOfDay,
+            onConfirm = { timeOfDay = it; showTimePicker = false },
+            onDismiss = { showTimePicker = false },
+        )
+    }
+}
+
+@Composable
+private fun SegmentedCard(modifier: Modifier, label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = if (selected) {
+        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    } else {
+        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    }
+    Card(onClick = onClick, colors = colors, modifier = modifier) {
+        Text(
+            label,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StrictnessSelector(strictness: Strictness, onSelect: (Strictness) -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Strictness.entries.forEach { s ->
+            FilterChip(
+                selected = strictness == s,
+                onClick = { onSelect(s) },
+                label = { Text(s.label()) },
+            )
+        }
+    }
+    Text(
+        text = when (strictness) {
+            Strictness.GENTLE -> "A quiet notification."
+            Strictness.STICKY -> "An ongoing heads-up with a Done action."
+            Strictness.NAGGING -> "Repeats until you stop it."
+            Strictness.TAKEOVER -> "A full-screen card that rings and locks the countdown."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimePickerDialog(initial: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    val state = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = true)
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TimePicker(state = state)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = { onConfirm(state.hour * 60 + state.minute) }) { Text("OK") }
                 }
             }
         }

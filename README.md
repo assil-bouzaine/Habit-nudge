@@ -128,7 +128,7 @@ Pinned versions: AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, Room 2.6.1.
 
 ## First run on the phone
 
-Open the app, go to the **Setup** tab, and fix every card marked with a warning:
+Open the app, tap the gear icon in a screen header (**Setup**), and fix every card marked with a warning:
 
 1. **Notifications**, and keep the Sticky, Nagging and Takeover categories set to pop up.
 2. **Banners and lock screen notifications** (EMUI). The app can't read these settings, so tick *Done* once you've set them.
@@ -144,8 +144,8 @@ Then use **Test reminder in 1 minute** and lock the phone to confirm reminders a
 
 | Problem | Fix |
 |---|---|
-| Reminders stop or arrive late | Re-check the Setup tab, especially *App launch* and *Battery optimization*. Look at the reliability log on the Setup tab. |
-| App-open nudges stopped | EMUI sometimes switches the accessibility service off. The Setup tab shows a red dot, and the app posts a once-a-day warning. Turn it back on in Accessibility settings. |
+| Reminders stop or arrive late | Re-check Setup (gear icon), especially *App launch* and *Battery optimization*. Look at the reliability log on the Setup screen. |
+| App-open nudges stopped | EMUI sometimes switches the accessibility service off. The Setup gear shows a red dot, and the app posts a once-a-day warning. Turn it back on in Accessibility settings. |
 | Build fails with *"The process cannot access the file … classes.dex"* | Windows (usually antivirus) still has the previous build's file open. `build.ps1` already retries once; if it keeps happening, run it again. |
 | `adb devices` is empty | Re-plug the cable, choose *Transfer files*, accept the debugging prompt. On some PCs, Huawei's USB driver from HiSuite is needed. |
 | Want to inspect the reliability log on the PC | `adb pull /sdcard/Android/data/me.habitnudge/files/reliability.log` |
@@ -160,7 +160,7 @@ app/src/main/java/me/habitnudge/
 ├── notify/     Notification channels and builders
 ├── takeover/   Full-screen Takeover activity and alarm sound
 ├── nudge/      Accessibility service, nudge card overlay, bedtime mode, stats recording
-└── ui/         Compose screens (Plan, Recurring, Nudge, Stats, Setup), theme, shared components
+└── ui/         Compose screens (Reminders = plan + recurring, Nudge, Stats, Notes, Setup), theme, shared components
 app/schemas/    Exported Room schemas (used for automatic migrations)
 build.ps1       Build + install helper
 ```
