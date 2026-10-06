@@ -154,6 +154,12 @@ object Engine {
     }
 
     private suspend fun fire(context: Context, o: Occurrence, now: Long) {
+        // Advance note reminder schedule if this is a note occurrence
+        if (o.key.startsWith("note:")) {
+            val noteId = o.key.split(":")[1].toLongOrNull()
+            if (noteId != null) advanceNoteReminder(context, noteId)
+        }
+
         when (o.style.strictness) {
             Strictness.GENTLE -> Notifier.showGentle(context, o)
             Strictness.STICKY, Strictness.NAGGING, Strictness.TAKEOVER -> {
@@ -171,6 +177,23 @@ object Engine {
                 else Notifier.showActive(context, alert.copy(id = id))
             }
         }
+    }
+
+    /** Advance a note's reminder to the next occurrence after it fires. */
+    private suspend fun advanceNoteReminder(context: Context, noteId: Long) {
+        val note = context.app.db.note().getById(noteId) ?: return
+        val config = note.reminderConfig ?: return
+
+        val updatedConfig = config.copy(
+            nextReminderEpochDay = config.nextReminderEpochDay + config.intervalDays
+        )
+
+        context.app.db.note().update(
+            note.copy(
+                reminderConfig = updatedConfig,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
     }
 
     private suspend fun processNags(context: Context) {

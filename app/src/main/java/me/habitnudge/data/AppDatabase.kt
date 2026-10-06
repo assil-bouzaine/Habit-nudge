@@ -13,8 +13,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         PlannedReminder::class, RecurringRule::class, ActiveAlert::class,
         NudgeApp::class, NudgeMessage::class, AppDayStat::class,
+        Note::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -22,6 +23,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoMigration(from = 3, to = 4),
         // v5: recurring rules get days of the week; daily stats remember that day's limit.
         AutoMigration(from = 4, to = 5),
+        // v6: add notes table with optional recurring reminders.
+        AutoMigration(from = 5, to = 6),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,6 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun alerts(): AlertDao
     abstract fun nudge(): NudgeDao
     abstract fun stats(): StatsDao
+    abstract fun note(): NoteDao
 
     /** v3: the per-app nudge cooldown became the "Still here?" check-in interval (default 15 min). */
     @RenameColumn(tableName = "nudge_app", fromColumnName = "cooldownMin", toColumnName = "checkInMin")

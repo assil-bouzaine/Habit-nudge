@@ -110,3 +110,23 @@ data class ActiveAlert(
     val nextNagAt: Long? = null,
     val escalated: Boolean = false,
 )
+
+/** Configuration for a note's recurring reminder. */
+data class ReminderConfig(
+    val intervalDays: Int,
+    val timeOfDay: Int,
+    val isPaused: Boolean,
+    val nextReminderEpochDay: Long,
+    @Embedded val style: AlertStyle,
+)
+
+/** A personal note. Can be regular (visible) or secret (PIN-protected). Only regular notes can have reminders. */
+@Entity(tableName = "note")
+data class Note(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val content: String,
+    val isSecret: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
+    @Embedded val reminderConfig: ReminderConfig? = null,
+)

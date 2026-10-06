@@ -145,3 +145,32 @@ interface AlertDao {
     @Query("DELETE FROM active_alert WHERE id = :id")
     suspend fun delete(id: Long)
 }
+
+@Dao
+interface NoteDao {
+    @Query("SELECT * FROM note WHERE isSecret = 0 ORDER BY updatedAt DESC")
+    fun observeRegularNotes(): Flow<List<Note>>
+
+    @Query("SELECT * FROM note WHERE isSecret = 1 ORDER BY updatedAt DESC")
+    fun observeSecretNotes(): Flow<List<Note>>
+
+    @Query("SELECT * FROM note WHERE id = :id")
+    suspend fun getById(id: Long): Note?
+
+    @Query("""
+        SELECT * FROM note 
+        WHERE isSecret = 0
+        AND intervalDays IS NOT NULL 
+        AND isPaused = 0
+    """)
+    suspend fun getNotesWithActiveReminders(): List<Note>
+
+    @Insert
+    suspend fun insert(note: Note): Long
+
+    @Update
+    suspend fun update(note: Note)
+
+    @Delete
+    suspend fun delete(note: Note)
+}

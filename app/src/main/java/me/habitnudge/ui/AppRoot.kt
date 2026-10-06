@@ -3,6 +3,7 @@ package me.habitnudge.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
@@ -31,6 +32,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
     RECURRING("Recurring", Icons.Filled.Refresh),
     NUDGE("Nudge", Icons.Filled.Face),
     STATS("Stats", Icons.Filled.Star),
+    NOTES("Notes", Icons.AutoMirrored.Filled.List),
     SETUP("Setup", Icons.Filled.Settings),
 }
 
@@ -70,6 +72,7 @@ fun AppRoot(tab: Tab, onTab: (Tab) -> Unit, planDay: Long, onPlanDay: (Long) -> 
             Tab.RECURRING -> RecurringScreen(content)
             Tab.NUDGE -> NudgeScreen(content)
             Tab.STATS -> StatsScreen(content)
+            Tab.NOTES -> NotesScreen()
             Tab.SETUP -> HealthScreen(content)
         }
     }

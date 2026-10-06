@@ -90,6 +90,16 @@ class Prefs(context: Context) {
         get() = sp.getLong("serviceOffWarnedDay", -1L)
         set(v) = sp.edit { putLong("serviceOffWarnedDay", v) }
 
+    /** SHA-256 hashed PIN for secret notes; null = not set up. */
+    var notesAuthPin: String?
+        get() = sp.getString("notesAuthPin", null)
+        set(v) = sp.edit(commit = true) { putString("notesAuthPin", v) }
+
+    /** Secret notes are unlocked until this timestamp; 0 = locked. */
+    var notesAuthenticatedUntil: Long
+        get() = sp.getLong("notesAuthenticatedUntil", 0L)
+        set(v) = sp.edit(commit = true) { putLong("notesAuthenticatedUntil", v) }
+
     /** Settings the app can't read back, confirmed by hand on the health screen. */
     fun isConfirmed(key: String): Boolean = sp.getBoolean("confirmed_$key", false)
     fun setConfirmed(key: String, value: Boolean) = sp.edit { putBoolean("confirmed_$key", value) }

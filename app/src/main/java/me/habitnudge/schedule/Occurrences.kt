@@ -54,7 +54,44 @@ object Occurrences {
             add(Occurrence("test:$testAt", testAt, TEST_MESSAGE, style))
         }
 
+        // Note reminders (only regular notes with active reminders)
+        val noteReminders = generateNoteReminders(db, firstDay, lastDay, zone)
+        noteReminders.forEach { add(it) }
+
         return out.sortedBy { it.dueAt }
+    }
+
+    private suspend fun generateNoteReminders(
+        db: AppDatabase,
+        firstDay: LocalDate,
+        lastDay: LocalDate,
+        zone: ZoneId,
+    ): List<Occurrence> {
+        val notes = db.note().getNotesWithActiveReminders()
+        val result = mutableListOf<Occurrence>()
+
+        for (note in notes) {
+            val config = note.reminderConfig ?: continue
+            var day = LocalDate.ofEpochDay(config.nextReminderEpochDay)
+
+            // Generate occurrences every intervalDays within the range
+            while (!day.isAfter(lastDay)) {
+                if (!day.isBefore(firstDay)) {
+                    result.add(
+                        Occurrence(
+                            key = "note:${note.id}:${day.toEpochDay()}",
+                            dueAt = millisAt(day, config.timeOfDay, zone),
+                            message = note.content.take(200), // First 200 chars
+                            style = config.style,
+                            opensPlanner = false
+                        )
+                    )
+                }
+                day = day.plusDays(config.intervalDays.toLong())
+            }
+        }
+
+        return result
     }
 
     private fun millisAt(day: LocalDate, minuteOfDay: Int, zone: ZoneId): Long =
