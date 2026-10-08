@@ -14,12 +14,15 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import me.habitnudge.ui.AppTheme
 import androidx.compose.foundation.layout.Column
@@ -40,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -186,9 +191,37 @@ private fun AlarmTakeover(
     onDone: () -> Unit,
     onReschedule: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxWidth().height(4.dp).background(TakeoverRed))
-        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 24.dp)) {
+    Column(
+        Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                colors = listOf(Color(0xFF0A0D12), Color(0xFF111722), Color(0xFF191C24)),
+            ),
+        ),
+    ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "⚠ TAKEOVER",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.4.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(TakeoverRed.copy(alpha = 0.9f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+                Text(
+                    if (more > 0) "+$more pending" else "active now",
+                    color = ScrimMuted,
+                    fontSize = 13.sp,
+                )
+            }
+            Spacer(Modifier.height(18.dp))
             Text(
                 "Reminder",
                 style = MaterialTheme.typography.labelLarge,
@@ -200,32 +233,51 @@ private fun AlarmTakeover(
             Text(
                 time,
                 color = Color.White,
-                fontSize = 64.sp,
-                lineHeight = 70.sp,
+                fontSize = 56.sp,
+                lineHeight = 62.sp,
                 fontWeight = FontWeight.Light,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(16.dp))
+            Text(
+                "Pause. Breathe. Do this now.",
+                color = ScrimMuted,
+                fontSize = 15.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(18.dp))
             Column(
-                Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White.copy(alpha = 0.07f))
+                    .padding(horizontal = 20.dp, vertical = 22.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
                 Text(
                     alert.message,
                     color = Color.White,
-                    fontSize = 28.sp,
-                    lineHeight = 36.sp,
+                    fontSize = 30.sp,
+                    lineHeight = 38.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 if (alert.escalated) {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
                     Text(
                         "You ignored this ${alert.timesAlerted} times.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ScrimMuted,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TakeoverRed.copy(alpha = 0.92f),
                         textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color.Black.copy(alpha = 0.22f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
             }
@@ -233,7 +285,7 @@ private fun AlarmTakeover(
             TakeoverActions(
                 remaining, fraction, more, onDone, onReschedule,
                 button = TakeoverRed, muted = ScrimMuted,
-                track = Color.White.copy(alpha = 0.16f), outline = Color.White,
+                track = Color.White.copy(alpha = 0.2f), outline = Color.White,
             )
         }
     }
@@ -251,8 +303,7 @@ private fun NoteTakeover(
     onReschedule: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().background(Paper)) {
-        Box(Modifier.fillMaxWidth().height(4.dp).background(NoteTeal))
-        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 24.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp)) {
             Text(
                 "Note · $time",
                 style = MaterialTheme.typography.labelLarge,
@@ -261,17 +312,31 @@ private fun NoteTakeover(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Read it now and clear your head.",
+                color = InkMuted,
+                fontSize = 15.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(14.dp))
             Column(
-                Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White.copy(alpha = 0.72f))
+                    .padding(horizontal = 18.dp, vertical = 20.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
                 Text(
                     alert.message,
                     color = Ink,
-                    fontSize = 24.sp,
-                    lineHeight = 32.sp,
+                    fontSize = 25.sp,
+                    lineHeight = 33.sp,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 if (alert.escalated) {
                     Spacer(Modifier.height(12.dp))
@@ -280,6 +345,7 @@ private fun NoteTakeover(
                         style = MaterialTheme.typography.bodyMedium,
                         color = InkMuted,
                         textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
