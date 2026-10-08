@@ -11,10 +11,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.time.LocalDate
@@ -38,10 +40,10 @@ private fun nextAt(minuteOfDay: Int): Long {
 /** "Remind me later": quick offsets or a picked time. [onPick] gets the new time in epoch millis. */
 @Composable
 fun RescheduleDialog(onPick: (Long) -> Unit, onDismiss: () -> Unit) {
-    val context = LocalContext.current
     val now = remember { System.currentTimeMillis() }
     val options = listOf(15 to "In 15 minutes", 30 to "In 30 minutes", 60 to "In 1 hour", 120 to "In 2 hours")
     val fmt = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
+    var pickCustom by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -60,15 +62,21 @@ fun RescheduleDialog(onPick: (Long) -> Unit, onDismiss: () -> Unit) {
                     OptionRow(label, fmt.format(Date(at))) { onPick(at) }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                OptionRow("Pick a time…", "") {
-                    val inAnHour = LocalTime.now().plusHours(1)
-                    pickTime(context, inAnHour.hour * 60 + inAnHour.minute) { onPick(nextAt(it)) }
-                }
+                OptionRow("Pick a time…", "") { pickCustom = true }
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+
+    if (pickCustom) {
+        val inAnHour = LocalTime.now().plusHours(1)
+        DigitalTimeDialog(
+            initialMinute = inAnHour.hour * 60 + inAnHour.minute,
+            onConfirm = { onPick(nextAt(it)) },
+            onDismiss = { pickCustom = false },
+        )
+    }
 }
 
 @Composable

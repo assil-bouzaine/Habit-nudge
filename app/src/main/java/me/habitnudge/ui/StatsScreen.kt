@@ -73,9 +73,12 @@ fun StatsScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val app = context.app
     val today = LocalDate.now().toEpochDay()
-    val week by remember(today) { app.db.stats().since(today - 6) }.collectAsState(initial = emptyList())
+    val weekAll by remember(today) { app.db.stats().since(today - 6) }.collectAsState(initial = emptyList())
     val apps by app.db.nudge().appsFlow().collectAsState(initial = emptyList())
     val labels = apps.associate { it.packageName to it.label }
+    // Removed apps keep their rows but drop out of every total, streak and list below.
+    val watched = remember(apps) { apps.map { it.packageName }.toSet() }
+    val week = remember(weekAll, watched) { weekAll.filter { it.packageName in watched } }
     var limit by remember { mutableIntStateOf(app.prefs.dailyLimitMin) }
     var summary by remember { mutableStateOf<Stats.Summary?>(null) }
     var editingLimit by remember { mutableStateOf(false) }

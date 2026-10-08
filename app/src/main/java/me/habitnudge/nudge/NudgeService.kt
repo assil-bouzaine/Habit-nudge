@@ -155,6 +155,10 @@ class NudgeService : AccessibilityService() {
             if (session === s && s.leftAt == null && current == s.pkg) {
                 val minutes = ((SystemClock.elapsedRealtime() - s.startedAt) / 60_000L).toInt()
                 recordStat(s.pkg, checkIns = 1)
+                if (app.prefs.alertsPaused) {
+                    watched[s.pkg]?.let { scheduleCheckIn(s, it) }
+                    return@postDelayed
+                }
                 if (Bedtime.isNow(app.prefs)) {
                     showBedtime(target.label, target.packageName, "$minutes minutes in ${target.label}, at ${nowText()}. Go to sleep.")
                 } else {
@@ -168,6 +172,7 @@ class NudgeService : AccessibilityService() {
     private fun nudge(target: NudgeApp) {
         val s = session
         recordStat(target.packageName, opens = 1)
+        if (app.prefs.alertsPaused) return
         if (Bedtime.isNow(app.prefs)) {
             showBedtime(target.label, target.packageName, Bedtime.message(app.prefs, target.label, nowText()))
             return
@@ -181,6 +186,7 @@ class NudgeService : AccessibilityService() {
 
     /** Full-screen bedtime card: no auto-fade; "Stay anyway" unlocks after a few seconds. */
     fun showBedtime(label: String, pkg: String?, message: String) {
+        if (app.prefs.alertsPaused) return
         val icon = pkg?.let { runCatching { packageManager.getApplicationIcon(it) }.getOrNull() }
         card.showBedtime(nowText(), message, app.prefs.bedtimeStayLockSec, icon)
     }
@@ -196,6 +202,7 @@ class NudgeService : AccessibilityService() {
     /** [pkg] supplies the icon on the card; null shows a generic one. */
     fun show(style: NudgeStyle, label: String, message: String, pkg: String? = null) {
         val prefs = app.prefs
+        if (prefs.alertsPaused) return
         when (style) {
             NudgeStyle.CARD -> {
                 val icon = pkg?.let { runCatching { packageManager.getApplicationIcon(it) }.getOrNull() }

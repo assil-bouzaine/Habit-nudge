@@ -30,7 +30,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -43,8 +42,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -295,7 +292,9 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePaus
                     if (note.isSecret) append("Secret · ")
                     if (config == null) append("No reminder")
                     else if (config.isPaused) append("Paused")
-                    else append("Every ${config.intervalDays}d · ${formatTime(config.timeOfDay)} · ${config.style.strictness.label()}")
+                    else if (config.timesPerDay > 1) {
+                        append("Every ${config.intervalDays}d · ${config.timesPerDay}× ${formatTime(config.windowStartMin)}–${formatTime(config.windowEndMin)} · ${config.style.strictness.label()}")
+                    } else append("Every ${config.intervalDays}d · ${formatTime(config.timeOfDay)} · ${config.style.strictness.label()}")
                     append(" · ${formatRelativeTime(note.updatedAt)}")
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -447,9 +446,14 @@ fun NoteEditorDialog(
     var hasReminder by remember { mutableStateOf(note?.reminderConfig != null) }
     var intervalDays by remember { mutableStateOf(note?.reminderConfig?.intervalDays ?: 1) }
     var timeOfDay by remember { mutableStateOf(note?.reminderConfig?.timeOfDay ?: (9 * 60)) }
+    var timesPerDay by remember { mutableStateOf(note?.reminderConfig?.timesPerDay ?: 5) }
+    var windowStart by remember { mutableStateOf(note?.reminderConfig?.windowStartMin ?: (7 * 60)) }
+    var windowEnd by remember { mutableStateOf(note?.reminderConfig?.windowEndMin ?: (22 * 60)) }
     var isPaused by remember { mutableStateOf(note?.reminderConfig?.isPaused ?: false) }
     var strictness by remember { mutableStateOf(note?.reminderConfig?.style?.strictness ?: Strictness.GENTLE) }
     var showTimePicker by remember { mutableStateOf(false) }
+    // Several random times a day inside a window, or once at a fixed time.
+    val multi = timesPerDay > 1
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -541,11 +545,52 @@ fun NoteEditorDialog(
                                 )
                             }
 
-                            OutlinedButton(
-                                onClick = { showTimePicker = true },
-                                modifier = Modifier.fillMaxWidth(),
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                Text("Remind at ${formatTime(timeOfDay)}", style = MaterialTheme.typography.bodyMedium)
+                                SegmentedCard(
+                                    modifier = Modifier.weight(1f),
+                                    label = "Once a day",
+                                    selected = !multi,
+                                    onClick = { timesPerDay = 1 },
+                                )
+                                SegmentedCard(
+                                    modifier = Modifier.weight(1f),
+                                    label = "Several times",
+                                    selected = multi,
+                                    onClick = { if (!multi) timesPerDay = 5 },
+                                )
+                            }
+
+                            if (!multi) {
+                                OutlinedButton(
+                                    onClick = { showTimePicker = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Remind at ${formatTime(timeOfDay)}", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            } else {
+                                Text(
+                                    "Picks random times inside the window, a different set each day.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TimeButton("From", windowStart) { windowStart = it }
+                                    Spacer(Modifier.width(8.dp))
+                                    TimeButton("to", windowEnd) { windowEnd = it }
+                                }
+                                NumberField("Times per day", timesPerDay, 1, 24) {
+                                    timesPerDay = it
+                                }
+                                if (windowEnd <= windowStart) {
+                                    Text(
+                                        "The end must be after the start.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
                             }
 
                             Text("Strictness", style = MaterialTheme.typography.labelLarge)
@@ -579,15 +624,34 @@ fun NoteEditorDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Button(
                         onClick = {
-                            val cfg = if (hasReminder && !secretToggle) {
-                                val nextDay = note?.reminderConfig?.nextReminderEpochDay ?: LocalDate.now().toEpochDay()
-                                ReminderConfig(
-                                    intervalDays = intervalDays,
+                            val cfg = if (hasReminder && !secretToggle && (!multi || windowEnd > windowStart)) {
+                                val interval = intervalDays.coerceAtLeast(1)
+                                val today = LocalDate.now().toEpochDay()
+                                var startDay = note?.reminderConfig?.nextReminderEpochDay ?: today
+                                // First slot must be in the future: a past slot would be dropped
+                                // as late and the reminder would never start.
+                                val nowMin = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+                                val tmp = ReminderConfig(
+                                    intervalDays = interval,
                                     timeOfDay = timeOfDay,
                                     isPaused = isPaused,
-                                    nextReminderEpochDay = nextDay,
+                                    nextReminderEpochDay = startDay,
                                     style = AlertStyle(strictness = strictness),
+                                    timesPerDay = timesPerDay,
+                                    windowStartMin = windowStart,
+                                    windowEndMin = windowEnd,
                                 )
+                                while (startDay <= today) {
+                                    if (startDay < today) {
+                                        startDay += interval
+                                        continue
+                                    }
+                                    val ahead = if (!multi) timeOfDay > nowMin
+                                    else me.habitnudge.schedule.Occurrences
+                                        .noteSlots(note?.id ?: 0L, today, tmp).any { it > nowMin }
+                                    if (ahead) break else startDay += interval
+                                }
+                                tmp.copy(nextReminderEpochDay = startDay)
                             } else null
                             onSave(
                                 Note(
@@ -600,7 +664,7 @@ fun NoteEditorDialog(
                                 ),
                             )
                         },
-                        enabled = content.isNotBlank(),
+                        enabled = content.isNotBlank() && (!hasReminder || secretToggle || !multi || windowEnd > windowStart),
                         modifier = Modifier.defaultMinSize(minWidth = 88.dp),
                     ) { Text("Save") }
                 }
@@ -609,8 +673,8 @@ fun NoteEditorDialog(
     }
 
     if (showTimePicker) {
-        TimePickerDialog(
-            initial = timeOfDay,
+        DigitalTimeDialog(
+            initialMinute = timeOfDay,
             onConfirm = { timeOfDay = it; showTimePicker = false },
             onDismiss = { showTimePicker = false },
         )
@@ -662,29 +726,4 @@ private fun StrictnessSelector(strictness: Strictness, onSelect: (Strictness) ->
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp),
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TimePickerDialog(initial: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
-    val state = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = true)
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                TimePicker(state = state)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = { onConfirm(state.hour * 60 + state.minute) }) { Text("OK") }
-                }
-            }
-        }
-    }
 }

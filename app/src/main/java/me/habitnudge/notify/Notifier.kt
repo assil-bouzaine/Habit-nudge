@@ -138,6 +138,9 @@ object Notifier {
 
     fun cancelStillHere(context: Context) = nm(context).cancel(TAG_NUDGE, 1)
 
+    /** Master pause: silence everything this app posted. ActiveAlert rows stay, so resume re-posts them. */
+    fun cancelAll(context: Context) = nm(context).cancelAll()
+
     fun showGentle(context: Context, o: Occurrence) {
         val n = Notification.Builder(context, CH_GENTLE)
             .setSmallIcon(R.drawable.ic_notif)

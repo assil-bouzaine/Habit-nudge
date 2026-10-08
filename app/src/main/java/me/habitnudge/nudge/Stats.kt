@@ -48,6 +48,8 @@ object Stats {
     /**
      * Each finished day is judged against the limit that applied that day (stored with its stats);
      * a day with no watched-app use at all counts as under. Days before tracking began don't count.
+     * Only currently-watched apps count: removing an app takes its history out of the totals
+     * (the rows stay in the database, so re-adding it brings them back).
      */
     suspend fun summary(app: HabitApp): Summary {
         val today = LocalDate.now().toEpochDay()
@@ -55,7 +57,9 @@ object Stats {
         val currentLimit = app.prefs.dailyLimitMin
         val firstShown = today - CALENDAR_DAYS + 1
         val from = if (start < 0) firstShown else minOf(start, firstShown)
-        val totals = app.db.stats().totalsSince(from).associateBy { it.day }
+        val pkgs = app.db.nudge().watchedPackages()
+        // Room rejects an empty IN list; no watched apps means empty totals either way.
+        val totals = if (pkgs.isEmpty()) emptyMap() else app.db.stats().totalsSince(from, pkgs).associateBy { it.day }
 
         fun result(day: Long): DayResult {
             val t = totals[day]

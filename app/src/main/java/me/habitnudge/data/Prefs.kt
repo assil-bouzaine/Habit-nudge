@@ -12,6 +12,11 @@ class Prefs(context: Context) {
         get() = sp.getLong("lastProcessedAt", 0L)
         set(v) = sp.edit(commit = true) { putLong("lastProcessedAt", v) }
 
+    /** Master pause: while true nothing alerts — no reminders, nags, Takeovers or nudge cards. A latch, not timed. */
+    var alertsPaused: Boolean
+        get() = sp.getBoolean("alertsPaused", false)
+        set(v) = sp.edit(commit = true) { putBoolean("alertsPaused", v) }
+
     /** For the health screen: when the next alarm is set for, and what it is. */
     var nextAlarmAt: Long
         get() = sp.getLong("nextAlarmAt", 0L)

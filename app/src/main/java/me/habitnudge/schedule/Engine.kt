@@ -38,6 +38,13 @@ object Engine {
 
     /** Alarm fired, phone booted, app updated or clock changed. */
     suspend fun onAlarm(context: Context) = mutex.withLock {
+        if (context.app.prefs.alertsPaused) {
+            // Master pause: swallow the window silently (missed occurrences are dropped,
+            // due nags stay due and fire on resume), then re-arm.
+            context.app.prefs.lastProcessedAt = System.currentTimeMillis()
+            scheduleNext(context)
+            return
+        }
         processDue(context)
         processNags(context)
         restoreActive(context)
@@ -60,15 +67,36 @@ object Engine {
     suspend fun onAppStart(context: Context) = mutex.withLock {
         context.app.db.planned().deleteBefore(LocalDate.now().toEpochDay() - KEEP_PLANNED_DAYS)
         context.app.db.stats().deleteBefore(LocalDate.now().toEpochDay() - Stats.KEEP_DAYS)
-        restoreActive(context)
-        if (context.app.db.alerts().takeoverQueue().isNotEmpty() && !Takeover.inCall(context)) {
-            Takeover.launch(context)
+        if (!context.app.prefs.alertsPaused) {
+            restoreActive(context)
+            if (context.app.db.alerts().takeoverQueue().isNotEmpty() && !Takeover.inCall(context)) {
+                Takeover.launch(context)
+            }
+        }
+        scheduleNext(context)
+    }
+
+    /** Master pause latch: pausing silences everything now; resuming re-posts open alerts and re-arms. */
+    suspend fun setPaused(context: Context, paused: Boolean) = mutex.withLock {
+        val app = context.app
+        app.prefs.alertsPaused = paused
+        if (paused) {
+            AlarmSound.stop()
+            Notifier.cancelAll(context)
+            DiagLog.add(context, "alerts paused")
+        } else {
+            DiagLog.add(context, "alerts resumed")
+            restoreActive(context)
         }
         scheduleNext(context)
     }
 
     /** A call started while a Takeover was up: hide it and retry every minute until the call ends. */
     suspend fun deferTakeovers(context: Context) = mutex.withLock {
+        if (context.app.prefs.alertsPaused) {
+            scheduleNext(context)
+            return
+        }
         val dao = context.app.db.alerts()
         val retryAt = System.currentTimeMillis() + TAKEOVER_RETRY_MS
         for (a in dao.takeoverQueue()) {
@@ -156,8 +184,7 @@ object Engine {
     private suspend fun fire(context: Context, o: Occurrence, now: Long) {
         // Advance note reminder schedule if this is a note occurrence
         if (o.key.startsWith("note:")) {
-            val noteId = o.key.split(":")[1].toLongOrNull()
-            if (noteId != null) advanceNoteReminder(context, noteId)
+            advanceNoteReminder(context, o)
         }
 
         when (o.style.strictness) {
@@ -179,18 +206,32 @@ object Engine {
         }
     }
 
-    /** Advance a note's reminder to the next occurrence after it fires. */
-    private suspend fun advanceNoteReminder(context: Context, noteId: Long) {
+    /**
+     * Advance a note's reminder after it fires. Single-time notes roll to the next reminder day;
+     * multi-times notes stay on the day until its last slot fires, so the remaining random
+     * times still come. Keys are `note:<id>:<day>` or `note:<id>:<day>:<minute>`.
+     */
+    private suspend fun advanceNoteReminder(context: Context, o: Occurrence) {
+        val parts = o.key.split(":")
+        val noteId = parts.getOrNull(1)?.toLongOrNull() ?: return
         val note = context.app.db.note().getById(noteId) ?: return
         val config = note.reminderConfig ?: return
+        val interval = config.intervalDays.toLong().coerceAtLeast(1)
 
-        val updatedConfig = config.copy(
-            nextReminderEpochDay = config.nextReminderEpochDay + config.intervalDays
-        )
+        val firedDay = parts.getOrNull(2)?.toLongOrNull()
+        val firedMin = parts.getOrNull(3)?.toIntOrNull()
+        val nextDay = if (config.timesPerDay > 1 && firedDay != null && firedMin != null) {
+            val slots = Occurrences.noteSlots(noteId, firedDay, config)
+            // More random times later today: keep the day. Otherwise roll forward.
+            if (slots.any { it > firedMin }) return
+            maxOf(config.nextReminderEpochDay, firedDay) + interval
+        } else {
+            config.nextReminderEpochDay + interval
+        }
 
         context.app.db.note().update(
             note.copy(
-                reminderConfig = updatedConfig,
+                reminderConfig = config.copy(nextReminderEpochDay = nextDay),
                 updatedAt = System.currentTimeMillis()
             )
         )

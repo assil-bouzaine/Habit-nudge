@@ -59,6 +59,9 @@ interface NudgeDao {
     @Query("SELECT * FROM nudge_app ORDER BY label COLLATE NOCASE")
     fun appsFlow(): Flow<List<NudgeApp>>
 
+    @Query("SELECT packageName FROM nudge_app")
+    suspend fun watchedPackages(): List<String>
+
     @Query("SELECT COUNT(*) FROM nudge_app WHERE enabled = 1")
     suspend fun enabledCount(): Int
 
@@ -106,8 +109,11 @@ interface StatsDao {
     fun since(fromDay: Long): Flow<List<AppDayStat>>
 
     /** Total watched-app time per day and the limit that applied, for streaks and the calendar. */
-    @Query("SELECT day, SUM(foregroundMs) AS totalMs, MAX(limitMin) AS limitMin FROM app_day_stat WHERE day >= :fromDay GROUP BY day")
-    suspend fun totalsSince(fromDay: Long): List<DayTotal>
+    @Query(
+        "SELECT day, SUM(foregroundMs) AS totalMs, MAX(limitMin) AS limitMin FROM app_day_stat " +
+            "WHERE day >= :fromDay AND packageName IN (:pkgs) GROUP BY day",
+    )
+    suspend fun totalsSince(fromDay: Long, pkgs: List<String>): List<DayTotal>
 
     @Query("DELETE FROM app_day_stat WHERE day < :day")
     suspend fun deleteBefore(day: Long)

@@ -171,16 +171,20 @@ fun HealthScreen(modifier: Modifier = Modifier, onClose: () -> Unit = {}) {
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Button(
-                            onClick = {
+                    Button(
+                        onClick = {
+                            if (context.app.prefs.alertsPaused) {
+                                Toast.makeText(context, "Alerts are paused — resume first.", Toast.LENGTH_SHORT).show()
+                            } else {
                                 scope.launch {
                                     Engine.scheduleTest(context, testLevel)
                                     refresh++
                                     Toast.makeText(context, "Test set. Lock the phone now.", Toast.LENGTH_LONG).show()
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                        ) { Text("Test ${testLevel.label()} in 1 minute") }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) { Text("Test ${testLevel.label()} in 1 minute") }
                     }
                 }
             }

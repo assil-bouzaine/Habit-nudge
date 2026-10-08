@@ -1,16 +1,17 @@
 package me.habitnudge.ui
 
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import java.time.LocalDate
 import java.time.ZoneId
 import android.content.Context
-import android.text.format.DateFormat
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.padding
@@ -18,8 +19,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -38,15 +39,6 @@ import me.habitnudge.data.Strictness
 fun formatMinute(minuteOfDay: Int): String =
     LocalTime.of(minuteOfDay / 60, minuteOfDay % 60)
         .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
-
-fun pickTime(context: Context, initialMinute: Int, onPicked: (Int) -> Unit) {
-    TimePickerDialog(
-        context,
-        { _, hour, minute -> onPicked(hour * 60 + minute) },
-        initialMinute / 60, initialMinute % 60,
-        DateFormat.is24HourFormat(context),
-    ).show()
-}
 
 /** Calendar dialog; days before today can't be picked. [initialDay] and the result are epoch days. */
 fun pickDate(context: Context, initialDay: Long, onPicked: (Long) -> Unit) {
@@ -62,10 +54,74 @@ fun pickDate(context: Context, initialDay: Long, onPicked: (Long) -> Unit) {
 
 @Composable
 fun TimeButton(label: String, minuteOfDay: Int, onPicked: (Int) -> Unit) {
-    val context = LocalContext.current
-    FilledTonalButton(onClick = { pickTime(context, minuteOfDay, onPicked) }) {
+    var show by remember { mutableStateOf(false) }
+    FilledTonalButton(onClick = { show = true }) {
         Text("$label ${formatMinute(minuteOfDay)}")
     }
+    if (show) {
+        DigitalTimeDialog(
+            initialMinute = minuteOfDay,
+            onConfirm = { show = false; onPicked(it) },
+            onDismiss = { show = false },
+        )
+    }
+}
+
+/**
+ * The one time picker in the app: 24-hour, typed, no analog clock and no AM/PM.
+ * Two numeric fields, so every keyboard can type into them.
+ */
+@Composable
+fun DigitalTimeDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    var hour by remember { mutableStateOf((initialMinute / 60).toString()) }
+    var minute by remember { mutableStateOf(String.format("%02d", initialMinute % 60)) }
+    val h = hour.toIntOrNull()
+    val m = minute.toIntOrNull()
+    val valid = h != null && m != null && h in 0..23 && m in 0..59
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        title = { Text("Time") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = hour,
+                        onValueChange = { hour = it.filter(Char::isDigit).take(2) },
+                        label = { Text("Hour") },
+                        placeholder = { Text("14") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = !valid,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.width(96.dp),
+                    )
+                    Text(":", style = MaterialTheme.typography.headlineSmall)
+                    OutlinedTextField(
+                        value = minute,
+                        onValueChange = { minute = it.filter(Char::isDigit).take(2) },
+                        label = { Text("Minute") },
+                        placeholder = { Text("30") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = !valid,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.width(96.dp),
+                    )
+                }
+                Text(
+                    if (valid) "24-hour time." else "Hour 0–23, minute 0–59.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(h!! * 60 + m!!) }, enabled = valid) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** Integer field that only reports values within [min]..[max]; the text may be briefly invalid while typing. */

@@ -75,6 +75,7 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 - **Occurrence keys** are stable (`p:<id>`, `r:<id>:<epochDay>:<minute>`, `test:<millis>`), so nothing fires twice.
 - **Active alerts:** Sticky/Nagging/Takeover become an `ActiveAlert` row until Done. For Takeovers, `nextNagAt` doubles as the "retry after the call" time.
 - **Concurrency:** all Engine entry points are serialized by a `Mutex`.
+- **Master pause** (`Prefs.alertsPaused`, a latch, not timed): `Engine.setPaused` silences everything now (stops the Takeover tone, `Notifier.cancelAll`) and re-posts open alerts on resume. While paused, `onAlarm` advances the occurrence window without firing (missed reminders are dropped, due nags stay due and fire on resume), `onAppStart`/`deferTakeovers` don't re-post, and the service-off warning is skipped. The NudgeService keeps recording stats but shows no cards, banners or check-ins. A Takeover card already on screen stays until Done. Test/preview buttons toast instead of scheduling while paused.
 
 ### Strictness levels
 
@@ -90,6 +91,7 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 - **Sound:** the tone is started by the Engine, not the activity, because EMUI keeps the card *paused* over the lock screen.
 - **Leaving it:** Back is blocked, and Home or recents relaunches it.
 - **Calls:** during a call (audio mode IN_CALL / IN_COMMUNICATION / RINGTONE) it is deferred and retried every minute.
+- **Two looks:** plan/recurring Takeovers are a dark full-bleed alarm card with a red accent and a clock face; note Takeovers (occurrence key `note:…`) are a full light paper sheet with a teal accent (`AlarmTakeover` vs `NoteTakeover` in `TakeoverActivity.kt`).
 
 **Reschedule ("remind me later")** is on every reminder notification and on the Takeover card. On the card it's locked by the same countdown as Done. Choosing a time closes the alert and adds a `PlannedReminder` at the new time, with the same message, strictness and opens-planner flag (`Engine.rescheduleReminder`).
 
@@ -109,13 +111,14 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
   - "Stay anyway" is locked for 15 seconds; "Get me out" works at once
   - check-ins every 5 minutes as that same card
 - **Stats** recorded per app per day: opens, Get me out taps, Stay taps, check-ins, foreground time, and that day's limit.
+- **Removing a watched app takes it out of every stat** (day totals, streaks, calendar, per-app list): `Stats.summary` filters `totalsSince` by `NudgeDao.watchedPackages()`, and `StatsScreen` filters the `since` flow the same way. The rows stay in the database, so re-adding the app brings its history back.
 
 ### Notes (`ui/NotesScreen.kt`, `data/NoteAuth.kt`)
 
 - **Two kinds:** regular notes (always visible) and secret notes (PIN-protected). Only regular notes get reminders — the editor hides the reminder options for secrets.
 - **PIN:** SHA-256 hash in `Prefs.notesAuthPin`, stored by `NoteAuth`; **no recovery** (losing it hides the secrets forever). An unlock lasts **60 seconds** (`NoteAuth.SESSION_DURATION_MS`), then secrets hide on their own.
 - **Hiding:** the lock glyph in the Notes header switches views — locked shows regular notes only, unlocked shows **secret notes alone** (never mixed). While unlocked, "+" defaults to a secret note. There is deliberately no "Secret Notes" section that reveals private notes exist.
-- **Reminders:** optional per regular note — every N days at a set time, any strictness (default Gentle), with Pause/Resume on the card (`ReminderConfig.isPaused`). Occurrence key `note:<id>:<epochDay>`; `Occurrences.generateNoteReminders` creates the window and `Engine.advanceNoteReminder` fires one and rolls `nextReminderEpochDay` forward. Deleting the note removes its reminder.
+- **Reminders:** optional per regular note — every N days at a set time, any strictness (default Gentle), with Pause/Resume on the card (`ReminderConfig.isPaused`). Occurrence key `note:<id>:<epochDay>`; `Occurrences.generateNoteReminders` creates the window and `Engine.advanceNoteReminder` fires one and rolls `nextReminderEpochDay` forward. A day stuck in the past rolls itself forward on the next schedule computation, and the editor starts new reminders on the next future slot (a past slot would be dropped as late and never start). Deleting the note removes its reminder.
 - **List vs editor:** the list clamps content to one line with an ellipsis; the editor shows it in full.
 
 ### Data (Room, `app/schemas/` exported)
@@ -128,6 +131,8 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 | v4 | app_day_stat |
 | v5 | recurring_rule.daysMask (bit 0 = Mon … bit 6 = Sun, 127 = every day), app_day_stat.limitMin, planned_reminder.opensPlanner |
 | v6 | note (content, isSecret, timestamps, optional embedded reminder_config: intervalDays, timeOfDay, isPaused, nextReminderEpochDay, strictness) |
+| v7 | reminder_config gains timesPerDay, windowStartMin, windowEndMin (multi-times-per-day note reminders) |
+| v8 | data-only: clear v7's backfilled window columns from reminder-less notes (the backfill broke Room's all-null check for the optional reminder and crashed every note read) |
 
 **Always add a migration**, normally an `AutoMigration`. Never use destructive migration: the user's data lives only on the phone. Seeding happens once and is tracked by `Prefs` flags (`seeded`, `seededNudge`, `seededRuthless`).
 
@@ -137,6 +142,7 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 
 - **Colours:** brand blue `#1877F2` (`BrandBlue` in `ui/Theme.kt`), with light and dark schemes.
 - **Shared components:** white `AppCard`s on a tinted background, `ScreenHeader` (title-line-aligned icons: `leading` slot e.g. a back arrow, `trailing` slot e.g. the Notes lock, plus the Setup gear with its red dot unless `showGear = false`), `Pill`, `StrictnessPill`, `IconBadge`, `SectionLabel`, `EmptyState` (`ui/Components.kt`).
+- **Master pause UI:** a bell toggle in every `ScreenHeader` (via `LocalPause`) plus a slim "Alerts paused — nothing will ring" banner with Resume above the tab content (`PausedBanner` in `AppRoot.kt`).
 - **Strictness colours:** Gentle green, Sticky blue, Nagging amber, Takeover red.
 - **Icons:** only the `material-icons-core` set is available (no extended icons), so emoji are used where no core icon fits (🌙 🔥 🏆).
 - **Status never by colour alone:** charts follow the dataviz rules, with a glyph or legend for every status colour.

@@ -7,15 +7,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -27,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +58,7 @@ fun ScreenHeader(
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val setup = LocalSetup.current
+    val pause = LocalPause.current
     Row(
         Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -72,6 +77,22 @@ fun ScreenHeader(
             }
         }
         trailing()
+        // No moon in the icon set, so this is a small labeled button instead of a glyph.
+        if (pause != null) {
+            TextButton(
+                onClick = pause.toggle,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.heightIn(min = 40.dp),
+            ) {
+                Text(
+                    if (pause.paused) "Resume" else "Do not disturb",
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    color = if (pause.paused) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         if (showGear && setup != null) {
             IconButton(onClick = setup.open) {
                 if (setup.problem) {
@@ -264,6 +285,37 @@ fun EmptyState(
         if (action != null) {
             Spacer(Modifier.height(AppSpacing.sm))
             action()
+        }
+    }
+}
+
+/** Slim persistent strip while the master pause is on: state at a glance, one tap to resume. */
+@Composable
+fun PausedBanner(onResume: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Row(
+            Modifier.padding(start = AppSpacing.md, end = AppSpacing.sm, top = 2.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(AppSpacing.sm))
+            Text(
+                "Alerts paused — nothing will ring",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            TextButton(onClick = onResume) { Text("Resume") }
         }
     }
 }

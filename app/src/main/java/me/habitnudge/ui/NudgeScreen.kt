@@ -225,6 +225,10 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
                             })
                         }
                         Button(onClick = {
+                            if (app.prefs.alertsPaused) {
+                                Toast.makeText(context, "Alerts are paused — resume first.", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
                             val service = NudgeService.instance
                             if (service == null) {
                                 Toast.makeText(context, "Turn on the nudge service first.", Toast.LENGTH_SHORT).show()
@@ -313,6 +317,10 @@ private fun BedtimeSettings(previewApp: NudgeApp?) {
                 NumberField("Check in every (minutes)", checkIn, 1, 60) { checkIn = it; prefs.bedtimeCheckInMin = it }
                 NumberField("\"Stay anyway\" unlocks after (seconds)", lock, 0, 120) { lock = it; prefs.bedtimeStayLockSec = it }
                 FilledTonalButton(onClick = {
+                    if (prefs.alertsPaused) {
+                        Toast.makeText(context, "Alerts are paused — resume first.", Toast.LENGTH_SHORT).show()
+                        return@FilledTonalButton
+                    }
                     val service = NudgeService.instance
                     if (service == null) {
                         Toast.makeText(context, "Turn on the nudge service first.", Toast.LENGTH_SHORT).show()

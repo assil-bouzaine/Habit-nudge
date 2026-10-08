@@ -118,6 +118,13 @@ data class ReminderConfig(
     val isPaused: Boolean,
     val nextReminderEpochDay: Long,
     @Embedded val style: AlertStyle,
+    /**
+     * Fires this many times per reminder day at deterministic pseudo-random times inside
+     * [windowStartMin]..[windowEndMin]. 1 = once at [timeOfDay]; the window is then ignored.
+     */
+    @ColumnInfo(defaultValue = "1") val timesPerDay: Int = 1,
+    @ColumnInfo(defaultValue = "420") val windowStartMin: Int = 7 * 60,
+    @ColumnInfo(defaultValue = "1320") val windowEndMin: Int = 22 * 60,
 )
 
 /** A personal note. Can be regular (visible) or secret (PIN-protected). Only regular notes can have reminders. */
