@@ -34,7 +34,7 @@ GitHub: https://github.com/assil-bouzaine/Habit-nudge (public). Commit identity 
   - **Health screen:** "Test reminder in 1 minute" at each strictness level.
   - **Crashes:** `adb logcat -d -b crash`.
   - **Alarms:** `adb shell dumpsys alarm | grep habitnudge`.
-  - **Reliability log:** `adb shell cat /sdcard/Android/data/me.habitnudge/files/reliability.log`.
+  - **Reliability log:** `adb shell cat /sdcard/Android/data/me.habitnudge/files/reliability.log`. Takeover stages are logged (`note fired`, `takeover launched/deferred`, `takeover card created`) for timing gaps.
   - **Deep Doze test:** `adb shell dumpsys battery unplug; adb shell dumpsys deviceidle force-idle`, then `unforce` / `battery reset` to undo.
   - **Accessibility service config:** `adb shell dumpsys accessibility | grep -i "Bound services"`.
 
@@ -142,6 +142,7 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 
 - **Colours:** brand blue `#1877F2` (`BrandBlue` in `ui/Theme.kt`), with light and dark schemes.
 - **Shared components:** white `AppCard`s on a tinted background, `ScreenHeader` (title-line-aligned icons: `leading` slot e.g. a back arrow, `trailing` slot e.g. the Notes lock, plus the Setup gear with its red dot unless `showGear = false`), `Pill`, `StrictnessPill`, `IconBadge`, `SectionLabel`, `EmptyState` (`ui/Components.kt`).
+- **Time picking:** one typed 12-hour AM/PM dialog (`DigitalTimeDialog` in `ui/Widgets.kt`), used for plan, recurring, reschedule, bedtime and notes — no analog clock anywhere.
 - **Master pause UI:** a bell toggle in every `ScreenHeader` (via `LocalPause`) plus a slim "Alerts paused — nothing will ring" banner with Resume above the tab content (`PausedBanner` in `AppRoot.kt`).
 - **Strictness colours:** Gentle green, Sticky blue, Nagging amber, Takeover red.
 - **Icons:** only the `material-icons-core` set is available (no extended icons), so emoji are used where no core icon fits (🌙 🔥 🏆).

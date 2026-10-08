@@ -19,6 +19,9 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,16 +71,18 @@ fun TimeButton(label: String, minuteOfDay: Int, onPicked: (Int) -> Unit) {
 }
 
 /**
- * The one time picker in the app: 24-hour, typed, no analog clock and no AM/PM.
- * Two numeric fields, so every keyboard can type into them.
+ * The one time picker in the app: 12-hour, typed, no analog clock.
+ * Hour and minute are numeric fields plus an AM/PM switch.
  */
 @Composable
 fun DigitalTimeDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
-    var hour by remember { mutableStateOf((initialMinute / 60).toString()) }
+    val initH24 = initialMinute / 60
+    var hour by remember { mutableStateOf((if (initH24 % 12 == 0) 12 else initH24 % 12).toString()) }
     var minute by remember { mutableStateOf(String.format("%02d", initialMinute % 60)) }
+    var isPm by remember { mutableStateOf(initH24 >= 12) }
     val h = hour.toIntOrNull()
     val m = minute.toIntOrNull()
-    val valid = h != null && m != null && h in 0..23 && m in 0..59
+    val valid = h != null && m != null && h in 1..12 && m in 0..59
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -90,7 +95,7 @@ fun DigitalTimeDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDismiss: (
                         value = hour,
                         onValueChange = { hour = it.filter(Char::isDigit).take(2) },
                         label = { Text("Hour") },
-                        placeholder = { Text("14") },
+                        placeholder = { Text("2") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         isError = !valid,
@@ -110,15 +115,31 @@ fun DigitalTimeDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDismiss: (
                         modifier = Modifier.width(96.dp),
                     )
                 }
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = !isPm,
+                        onClick = { isPm = false },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    ) { Text("AM") }
+                    SegmentedButton(
+                        selected = isPm,
+                        onClick = { isPm = true },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    ) { Text("PM") }
+                }
                 Text(
-                    if (valid) "24-hour time." else "Hour 0–23, minute 0–59.",
+                    if (valid) "12-hour time." else "Hour 1–12, minute 0–59.",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(h!! * 60 + m!!) }, enabled = valid) { Text("OK") }
+            // 12 AM -> 0, 12 PM -> 12, 1-11 PM -> 13-23.
+            TextButton(
+                onClick = { onConfirm(((h!! % 12) + if (isPm) 12 else 0) * 60 + m!!) },
+                enabled = valid,
+            ) { Text("OK") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

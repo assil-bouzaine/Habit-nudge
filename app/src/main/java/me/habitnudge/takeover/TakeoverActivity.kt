@@ -68,6 +68,7 @@ class TakeoverActivity : ComponentActivity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        me.habitnudge.data.DiagLog.add(this, "takeover card created")
 
         lifecycleScope.launch {
             app.db.alerts().takeoverQueueFlow().collect {

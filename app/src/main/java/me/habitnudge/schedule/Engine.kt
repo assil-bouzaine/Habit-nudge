@@ -184,6 +184,7 @@ object Engine {
     private suspend fun fire(context: Context, o: Occurrence, now: Long) {
         // Advance note reminder schedule if this is a note occurrence
         if (o.key.startsWith("note:")) {
+            DiagLog.add(context, "note fired ${o.key}")
             advanceNoteReminder(context, o)
         }
 
@@ -281,6 +282,9 @@ object Engine {
             // Ring from here, not from the card: over EMUI's lock screen the card stays paused.
             AlarmSound.ringFor(context, toSave.id)
             Takeover.launch(context)
+            DiagLog.add(context, "takeover launched ${alert.occurrenceKey}")
+        } else {
+            DiagLog.add(context, "takeover deferred (call) ${alert.occurrenceKey}")
         }
     }
 
