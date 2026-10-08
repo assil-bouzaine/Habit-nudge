@@ -26,13 +26,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -136,40 +134,42 @@ fun NotesScreen(modifier: Modifier = Modifier) {
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             // Header: title + a discreet lock, then the Setup gear (from ScreenHeader).
             item {
-                ScreenHeader("Notes", if (isSecretUnlocked) "Private" else null) {
-                    IconButton(onClick = ::onLockClick) {
-                        Icon(
-                            Icons.Default.Lock,
-                            contentDescription = "Private notes",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (isSecretUnlocked) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline,
-                        )
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    ScreenHeader("Notes", if (isSecretUnlocked) "Private" else null) {
+                        IconButton(onClick = ::onLockClick) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = "Private notes",
+                                modifier = Modifier.size(20.dp),
+                                tint = if (isSecretUnlocked) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline,
+                            )
+                        }
                     }
                 }
             }
 
             if (visibleNotes.isEmpty()) {
                 item {
-                    if (isSecretUnlocked) {
-                        EmptyState(
-                            emoji = "🔒",
-                            title = "No private notes yet",
-                            body = "Tap + and choose Secret to write one",
-                        )
-                    } else {
-                        EmptyState(
-                            emoji = "📝",
-                            title = "No notes yet",
-                            body = "Tap + to write your first note",
-                        )
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        if (isSecretUnlocked) {
+                            EmptyState(
+                                emoji = "🔒",
+                                title = "No private notes yet",
+                                body = "Tap + and choose Secret to write one",
+                            )
+                        } else {
+                            EmptyState(
+                                emoji = "📝",
+                                title = "No notes yet",
+                                body = "Tap + to write your first note",
+                            )
+                        }
                     }
                 }
             } else {
@@ -279,11 +279,9 @@ fun NotesScreen(modifier: Modifier = Modifier) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePause: () -> Unit) {
-    AppCard(onClick = onClick, onLongClick = onDelete) {
-        Column(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+    val config = note.reminderConfig
+    ListRow(onClick = onClick, onLongClick = onDelete) {
+        Column(Modifier.weight(1f)) {
             // One line only: the list is a list, the editor shows the full text.
             Text(
                 note.content,
@@ -291,90 +289,36 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePaus
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-
-            // Row 1: reminder info (left) and age (right).
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Spacer(Modifier.height(2.dp))
+            Text(
+                buildString {
+                    if (note.isSecret) append("Secret · ")
+                    if (config == null) append("No reminder")
+                    else if (config.isPaused) append("Paused")
+                    else append("Every ${config.intervalDays}d · ${formatTime(config.timeOfDay)} · ${config.style.strictness.label()}")
+                    append(" · ${formatRelativeTime(note.updatedAt)}")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (config != null) {
+            TextButton(
+                onClick = onTogglePause,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             ) {
-                if (note.isSecret) {
-                    Icon(
-                        Icons.Default.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.size(13.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-
-                note.reminderConfig?.let { config ->
-                    if (config.isPaused) {
-                        Pill("Paused", MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = null,
-                            modifier = Modifier.size(13.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            "Every ${config.intervalDays}d · ${formatTime(config.timeOfDay)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            softWrap = false,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        StrictnessPill(config.style.strictness)
-                    }
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                Text(
-                    formatRelativeTime(note.updatedAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    softWrap = false,
-                )
+                Text(if (config.isPaused) "Resume" else "Pause", style = MaterialTheme.typography.labelMedium)
             }
-
-            // Row 2: controls right-aligned — Pause/Resume never competes with the pills.
-            if (note.reminderConfig != null) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Spacer(Modifier.weight(1f))
-                    TextButton(
-                        onClick = onTogglePause,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    ) {
-                        Text(
-                            if (note.reminderConfig!!.isPaused) "Resume" else "Pause",
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                    }
-                    FilledTonalIconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(15.dp))
-                    }
-                }
-            } else {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FilledTonalIconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(15.dp))
-                    }
-                }
-            }
+        }
+        IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = "Delete note",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

@@ -25,8 +25,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -72,41 +70,50 @@ fun RecurringScreen(modifier: Modifier = Modifier, showHeader: Boolean = true) {
 
     Box(modifier) {
         LazyColumn(
-            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             if (showHeader) {
                 item {
-                    val on = rules.count { it.enabled }
-                    ScreenHeader("Recurring", if (rules.isEmpty()) "Reminders that repeat every day" else "$on of ${rules.size} on")
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        val on = rules.count { it.enabled }
+                        ScreenHeader("Recurring", if (rules.isEmpty()) "Reminders that repeat every day" else "$on of ${rules.size} on")
+                    }
                 }
             }
             if (rules.isEmpty()) {
-                item { EmptyState("🔁", "Nothing repeating", "Add things like \"drink water\" every 90 minutes.") }
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        EmptyState("🔁", "Nothing repeating", "Add things like \"drink water\" every 90 minutes.")
+                    }
+                }
             }
             items(rules, key = { it.id }) { rule ->
-                AppCard(Modifier.alpha(if (rule.enabled) 1f else 0.6f), onClick = { editing = rule }) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconBadge(
-                            if (rule.intervalMin == null) Icons.Filled.Notifications else Icons.Filled.Refresh,
-                            if (rule.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                ListRow(
+                    modifier = Modifier.alpha(if (rule.enabled) 1f else 0.6f),
+                    onClick = { editing = rule },
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(rule.message, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            rule.timeSummary(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(rule.message, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                rule.timeSummary(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                StrictnessPill(rule.style.strictness)
-                                if (rule.opensPlanner) Pill("Opens plan", MaterialTheme.colorScheme.secondary)
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            StrictnessLabel(rule.style.strictness)
+                            if (rule.opensPlanner) {
+                                Text(
+                                    "Opens plan",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
-                        Switch(checked = rule.enabled, onCheckedChange = { save(rule.copy(enabled = it)) })
                     }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = rule.enabled, onCheckedChange = { save(rule.copy(enabled = it)) })
                 }
             }
         }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -96,138 +98,165 @@ fun StatsScreen(modifier: Modifier = Modifier) {
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        item { ScreenHeader("Stats", "Daily limit: $limit min across your watched apps") }
-
-        // Headline numbers.
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatTile(Modifier.weight(1f), "🔥", "${s?.currentStreak ?: 0}", "day streak")
-                StatTile(Modifier.weight(1f), "🏆", "${s?.bestStreak ?: 0}", "best streak")
-                val tracked = s?.trackedDays ?: 0
-                val success = s?.successDays ?: 0
-                StatTile(
-                    Modifier.weight(1f), "✅", "$success/$tracked",
-                    if (tracked == 0) "days under" else "days under · ${success * 100 / tracked}%",
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                ScreenHeader("Stats", "Daily limit: $limit min across your watched apps")
+            }
+        }
+
+        // Headline numbers in one quiet strip — no dashboard cards.
+        item {
+            val tracked = s?.trackedDays ?: 0
+            val success = s?.successDays ?: 0
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                HeadlineStat("${s?.currentStreak ?: 0}", "day streak", Modifier.weight(1f))
+                HeadlineStat("${s?.bestStreak ?: 0}", "best", Modifier.weight(1f))
+                HeadlineStat(
+                    "$success/$tracked",
+                    if (tracked == 0) "days under" else "under · ${success * 100 / tracked}%",
+                    Modifier.weight(1f),
                 )
             }
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
         }
 
         // Today.
         item {
-            val over = todayMin > limit
-            AppCard {
-                Column(Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Today", style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                val over = todayMin > limit
+                SectionCard {
+                    Column {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Today", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    when {
+                                        over -> "Over by ${todayMin - limit} min"
+                                        else -> "${limit - todayMin} min left"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Text(
-                                when {
-                                    over -> "Over by ${todayMin - limit} min"
-                                    else -> "${limit - todayMin} min left"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                "$todayMin",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                " / $limit min",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 4.dp),
                             )
                         }
-                        Text(
-                            "$todayMin",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        Spacer(Modifier.height(10.dp))
+                        LinearProgressIndicator(
+                            progress = { (todayMin.toFloat() / limit.coerceAtLeast(1)).coerceIn(0f, 1f) },
+                            color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            strokeCap = StrokeCap.Round,
+                            modifier = Modifier.fillMaxWidth().height(8.dp),
                         )
-                        Text(
-                            " / $limit min",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    LinearProgressIndicator(
-                        progress = { (todayMin.toFloat() / limit.coerceAtLeast(1)).coerceIn(0f, 1f) },
-                        color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        strokeCap = StrokeCap.Round,
-                        modifier = Modifier.fillMaxWidth().height(10.dp),
-                    )
-                    TextButton(onClick = { editingLimit = true }, modifier = Modifier.padding(top = 4.dp)) {
-                        Text("Change daily limit")
+                        TextButton(onClick = { editingLimit = true }, modifier = Modifier.padding(top = 4.dp)) {
+                            Text("Change daily limit")
+                        }
                     }
                 }
             }
         }
 
         // Success calendar.
-        item { SectionLabel("Last ${Stats.CALENDAR_DAYS} days") }
         item {
-            AppCard {
-                Column(Modifier.padding(16.dp)) {
-                    val cal = s?.calendar.orEmpty()
-                    val picked = cal.firstOrNull { it.day == calendarDay }
-                    Text(
-                        picked?.let { dayDetail(it) } ?: "Tap a day",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    if (cal.isNotEmpty()) SuccessCalendar(cal, calendarDay) { calendarDay = it }
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        LegendItem("✓", SuccessGreen, "Under limit")
-                        LegendItem("✕", MaterialTheme.colorScheme.error, "Over limit")
-                        LegendItem("", MaterialTheme.colorScheme.outline, "Not tracked")
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Last ${Stats.CALENDAR_DAYS} days") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                SectionCard {
+                    Column {
+                        val cal = s?.calendar.orEmpty()
+                        val picked = cal.firstOrNull { it.day == calendarDay }
+                        Text(
+                            picked?.let { dayDetail(it) } ?: "Tap a day",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        if (cal.isNotEmpty()) SuccessCalendar(cal, calendarDay) { calendarDay = it }
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            LegendItem("✓", SuccessGreen, "Under limit")
+                            LegendItem("✕", MaterialTheme.colorScheme.error, "Over limit")
+                            LegendItem("", MaterialTheme.colorScheme.outline, "Not tracked")
+                        }
                     }
                 }
             }
         }
 
         // Last 7 days.
-        item { SectionLabel("Last 7 days") }
         item {
-            val days = (today - 6..today).toList()
-            val totals = days.associateWith { d -> minutes(byDay[d].orEmpty().sumOf { it.foregroundMs }) }
-            val sel = byDay[selectedDay].orEmpty()
-            AppCard {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "${dayName(selectedDay, today)}  ·  ${totals[selectedDay] ?: 0} min  ·  ${sel.sumOf { it.opens }} opens",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        "Tap a bar for that day",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    WeekBars(days, totals, limit, selectedDay, today) { selectedDay = it }
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        LegendSwatch(MaterialTheme.colorScheme.primary, "Under limit")
-                        LegendSwatch(MaterialTheme.colorScheme.error, "Over limit")
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Last 7 days") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                val days = (today - 6..today).toList()
+                val totals = remember(week) { days.associateWith { d -> minutes(byDay[d].orEmpty().sumOf { it.foregroundMs }) } }
+                val sel = byDay[selectedDay].orEmpty()
+                SectionCard {
+                    Column {
+                        Text(
+                            "${dayName(selectedDay, today)}  ·  ${totals[selectedDay] ?: 0} min  ·  ${sel.sumOf { it.opens }} opens",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            "Tap a bar for that day",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        WeekBars(days, totals, limit, selectedDay, today) { selectedDay = it }
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            LegendSwatch(MaterialTheme.colorScheme.primary, "Under limit")
+                            LegendSwatch(MaterialTheme.colorScheme.error, "Over limit")
+                        }
                     }
                 }
             }
         }
 
         item {
-            AppCard {
-                Column(Modifier.padding(16.dp)) {
-                    Text("This week", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (weekOpens == 0) "No opens of watched apps yet."
-                        else "You opened watched apps $weekOpens times and chose \"Get me out\" $weekOuts times" +
-                            " (${weekOuts * 100 / weekOpens}%).",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            val weekSummary = if (weekOpens == 0) "No opens of watched apps yet."
+            else "You opened watched apps $weekOpens times and chose \"Get me out\" $weekOuts times" +
+                " (${weekOuts * 100 / weekOpens}%)."
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("This week", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    weekSummary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
-        item { SectionLabel("Today by app") }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Today by app") }
+        }
         if (todayRows.isEmpty()) {
-            item { EmptyState("🌱", "Clean so far", "You haven't opened a watched app today.") }
+            item {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    EmptyState("🌱", "Clean so far", "You haven't opened a watched app today.")
+                }
+            }
         }
         items(todayRows, key = { it.packageName }) { row ->
             AppStatRow(row, labels[row.packageName])
@@ -277,22 +306,15 @@ private fun dayName(day: Long, today: Long): String = when (day) {
 }
 
 @Composable
-private fun StatTile(modifier: Modifier, emoji: String, value: String, label: String) {
-    AppCard(modifier) {
-        Column(
-            Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(emoji, fontSize = 22.sp)
-            Text(value, style = MaterialTheme.typography.headlineSmall, maxLines = 1)
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-            )
-        }
+private fun HeadlineStat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(value, style = MaterialTheme.typography.headlineSmall, maxLines = 1)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+        )
     }
 }
 
@@ -352,7 +374,7 @@ private fun CalendarCell(r: Stats.DayResult, selected: Boolean, onClick: () -> U
                     else -> Modifier
                 },
             )
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -472,26 +494,24 @@ private fun AppStatRow(row: AppDayStat, knownLabel: String?) {
     val icon = remember(row.packageName) {
         runCatching { pm.getApplicationIcon(row.packageName).toBitmap(96, 96).asImageBitmap() }.getOrNull()
     }
-    AppCard {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(label, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Pill("Left ${row.getOuts}×", MaterialTheme.colorScheme.primary)
-                    Pill("Stayed ${row.stays}×", MaterialTheme.colorScheme.secondary)
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("${minutes(row.foregroundMs)} min", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${row.opens} opens",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+    ListRow {
+        if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Left ${row.getOuts}× · stayed ${row.stays}×",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text("${minutes(row.foregroundMs)} min", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${row.opens} opens",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

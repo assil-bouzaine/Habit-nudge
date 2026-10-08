@@ -87,80 +87,95 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        item { ScreenHeader("Nudge", "A reality check when you open apps you want to use less") }
         item {
-            AppCard {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    IconBadge(
-                        if (serviceOn) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-                        if (serviceOn) SuccessGreen else MaterialTheme.colorScheme.error,
-                    )
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            if (serviceOn) "Nudge service is on" else "Nudge service is off",
-                            style = MaterialTheme.typography.titleMedium,
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                ScreenHeader("Nudge", "A reality check when you open apps you want to use less")
+            }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                SectionCard {
+                    Row(verticalAlignment = Alignment.Top) {
+                        StatusIcon(
+                            if (serviceOn) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                            if (serviceOn) SuccessGreen else MaterialTheme.colorScheme.error,
+                            description = if (serviceOn) "On" else "Off",
                         )
-                        Text(
-                            "It only notices which app is in front; it never reads what's on screen.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (!serviceOn) {
-                            Spacer(Modifier.height(8.dp))
-                            Button(onClick = {
-                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                            }) { Text("Turn on") }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (serviceOn) "Nudge service is on" else "Nudge service is off",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "It only notices which app is in front; it never reads what's on screen.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (!serviceOn) {
+                                Spacer(Modifier.height(8.dp))
+                                Button(onClick = {
+                                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                }) { Text("Turn on") }
+                            }
                         }
                     }
                 }
             }
         }
 
-        item { SectionLabel("Watched apps") }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Watched apps") }
+        }
         if (apps.isEmpty()) {
-            item { EmptyState("\uD83D\uDCF1", "No apps yet", "Choose the apps you open without thinking.") }
+            item {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    EmptyState("📱", "No apps yet", "Choose the apps you open without thinking.")
+                }
+            }
         }
         items(apps, key = { it.packageName }) { a ->
-            AppCard(Modifier.alpha(if (a.enabled) 1f else 0.6f), onClick = { editing = a }) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AppIcon(a.packageName)
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(a.label, style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Pill(if (a.style == NudgeStyle.CARD) "Card" else "Banner", MaterialTheme.colorScheme.primary)
-                            Pill(
-                                if (a.checkInMin > 0) "Check-in ${a.checkInMin} min" else "No check-ins",
-                                MaterialTheme.colorScheme.secondary,
-                            )
-                        }
-                    }
-                    Switch(checked = a.enabled, onCheckedChange = { on ->
-                        app.scope.launch { dao.upsertApp(a.copy(enabled = on)) }
-                    })
+            ListRow(
+                modifier = Modifier.alpha(if (a.enabled) 1f else 0.6f),
+                onClick = { editing = a },
+            ) {
+                AppIcon(a.packageName)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(a.label, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        (if (a.style == NudgeStyle.CARD) "Card" else "Banner") +
+                            (if (a.checkInMin > 0) " · check-in ${a.checkInMin} min" else " · no check-ins"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = a.enabled, onCheckedChange = { on ->
+                    app.scope.launch { dao.upsertApp(a.copy(enabled = on)) }
+                })
+            }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                FilledTonalButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                    Text(if (apps.isEmpty()) "Choose apps" else "Add or remove apps")
                 }
             }
         }
-        item {
-            FilledTonalButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                Text(if (apps.isEmpty()) "Choose apps" else "Add or remove apps")
-            }
-        }
 
-        item { SectionLabel("Messages") }
         item {
-            AppCard {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Messages") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                SectionCard {
                     Text(
                         "Shown in turn. {app} becomes the app's name.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
                     )
                     messages.forEachIndexed { i, m ->
                         if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -176,7 +191,7 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
                         value = newMessage,
                         onValueChange = { newMessage = it },
                         placeholder = { Text("Write a new message") },
-                        shape = MaterialTheme.shapes.medium,
+                        shape = MaterialTheme.shapes.small,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                     TextButton(
@@ -191,41 +206,51 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        item { SectionLabel("Card") }
         item {
-            AppCard {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField("Fades after (seconds)", seconds, 2, 60) {
-                        seconds = it
-                        app.prefs.nudgeSeconds = it
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("\"Get me out\" button", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                        Switch(checked = getMeOut, onCheckedChange = {
-                            getMeOut = it
-                            app.prefs.nudgeGetMeOut = it
-                        })
-                    }
-                    Button(onClick = {
-                        val service = NudgeService.instance
-                        if (service == null) {
-                            Toast.makeText(context, "Turn on the nudge service first.", Toast.LENGTH_SHORT).show()
-                        } else {
-                            // Preview as the first watched app, so the card shows its real icon.
-                            val sample = apps.firstOrNull()
-                            val label = sample?.label ?: "Instagram"
-                            app.scope.launch {
-                                val msg = Nudges.nextMessage(app, label)
-                                withContext(Dispatchers.Main) { service.show(NudgeStyle.CARD, label, msg, sample?.packageName) }
-                            }
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Card") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                SectionCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumberField("Fades after (seconds)", seconds, 2, 60) {
+                            seconds = it
+                            app.prefs.nudgeSeconds = it
                         }
-                    }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Preview the card") }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("\"Get me out\" button", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            Switch(checked = getMeOut, onCheckedChange = {
+                                getMeOut = it
+                                app.prefs.nudgeGetMeOut = it
+                            })
+                        }
+                        Button(onClick = {
+                            val service = NudgeService.instance
+                            if (service == null) {
+                                Toast.makeText(context, "Turn on the nudge service first.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                // Preview as the first watched app, so the card shows its real icon.
+                                val sample = apps.firstOrNull()
+                                val label = sample?.label ?: "Instagram"
+                                app.scope.launch {
+                                    val msg = Nudges.nextMessage(app, label)
+                                    withContext(Dispatchers.Main) { service.show(NudgeStyle.CARD, label, msg, sample?.packageName) }
+                                }
+                            }
+                        }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Preview the card") }
+                    }
                 }
             }
         }
 
-        item { SectionLabel("Bedtime") }
-        item { BedtimeSettings(previewApp = apps.firstOrNull()) }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Bedtime") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                BedtimeSettings(previewApp = apps.firstOrNull())
+            }
+        }
     }
 
     if (picking) {
@@ -264,11 +289,11 @@ private fun BedtimeSettings(previewApp: NudgeApp?) {
     var checkIn by remember { mutableIntStateOf(prefs.bedtimeCheckInMin) }
     var lock by remember { mutableIntStateOf(prefs.bedtimeStayLockSec) }
 
-    AppCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🌙", fontSize = 26.sp) // crescent moon
-                Spacer(Modifier.width(14.dp))
+                Text("🌙", fontSize = 20.sp) // crescent moon
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Bedtime mode", style = MaterialTheme.typography.titleMedium)
                     Text(

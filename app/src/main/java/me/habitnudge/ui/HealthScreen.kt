@@ -73,130 +73,145 @@ fun HealthScreen(modifier: Modifier = Modifier, onClose: () -> Unit = {}) {
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         item {
-            ScreenHeader(
-                "Setup",
-                "Make sure your reminders get through",
-                showGear = false,
-                leading = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                ScreenHeader(
+                    "Setup",
+                    "Make sure your reminders get through",
+                    showGear = false,
+                    leading = {
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                )
+            }
         }
         item {
-            AppCard {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconBadge(
-                            if (problems == 0) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-                            if (problems == 0) SuccessGreen else MaterialTheme.colorScheme.error,
-                            48.dp,
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text(
-                                when (problems) {
-                                    0 -> "You're all set"
-                                    1 -> "1 thing needs attention"
-                                    else -> "$problems things need attention"
-                                },
-                                style = MaterialTheme.typography.titleLarge,
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                SectionCard {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            StatusIcon(
+                                if (problems == 0) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                                if (problems == 0) SuccessGreen else MaterialTheme.colorScheme.error,
+                                size = 28.dp,
+                                description = if (problems == 0) "OK" else "Attention needed",
                             )
-                            Text(
-                                if (problems == 0) "Reminders can reach you." else "Fix the items marked below.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    when (problems) {
+                                        0 -> "You're all set"
+                                        1 -> "1 thing needs attention"
+                                        else -> "$problems things need attention"
+                                    },
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    if (problems == 0) "Reminders can reach you." else "Fix the items marked below.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
-                    }
-                    HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconBadge(Icons.Filled.Notifications, MaterialTheme.colorScheme.primary, 36.dp)
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text("Next alarm", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                if (nextAt == 0L) "Nothing scheduled" else "${formatTime(nextAt)}  ·  $nextLabel",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            StatusIcon(Icons.Filled.Notifications, MaterialTheme.colorScheme.primary, description = null)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Next alarm", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    if (nextAt == 0L) "Nothing scheduled" else "${formatTime(nextAt)}  ·  $nextLabel",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        item { SectionLabel("Checks") }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Checks") }
+        }
         items(items, key = { it.key }) { item ->
             HealthRow(item, refresh) { refresh++ }
         }
 
-        item { SectionLabel("Try it") }
         item {
-            AppCard {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Test reminder", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Fires in 1 minute; lock the phone and wait. A Nagging test repeats every minute and " +
-                            "becomes a Takeover after 3 ignored alerts. A Takeover test's Done unlocks after 10 seconds.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    for (level in TESTABLE) {
-                        Row(
-                            Modifier.fillMaxWidth().selectable(selected = testLevel == level, onClick = { testLevel = level }),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(
-                                selected = testLevel == level,
-                                onClick = null,
-                                colors = RadioButtonDefaults.colors(selectedColor = level.color()),
-                            )
-                            Text(level.label(), Modifier.padding(start = 8.dp, top = 10.dp, bottom = 10.dp), color = level.color())
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                Engine.scheduleTest(context, testLevel)
-                                refresh++
-                                Toast.makeText(context, "Test set. Lock the phone now.", Toast.LENGTH_LONG).show()
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Try it") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                SectionCard {
+                    Column {
+                        Text("Test reminder", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Fires in 1 minute; lock the phone and wait. A Nagging test repeats every minute and " +
+                                "becomes a Takeover after 3 ignored alerts. A Takeover test's Done unlocks after 10 seconds.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        for (level in TESTABLE) {
+                            Row(
+                                Modifier.fillMaxWidth().selectable(selected = testLevel == level, onClick = { testLevel = level }),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = testLevel == level,
+                                    onClick = null,
+                                    colors = RadioButtonDefaults.colors(selectedColor = level.color()),
+                                )
+                                Text(level.label(), Modifier.padding(start = 8.dp, top = 10.dp, bottom = 10.dp), color = level.color())
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) { Text("Test ${testLevel.label()} in 1 minute") }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    Engine.scheduleTest(context, testLevel)
+                                    refresh++
+                                    Toast.makeText(context, "Test set. Lock the phone now.", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        ) { Text("Test ${testLevel.label()} in 1 minute") }
+                    }
                 }
             }
         }
 
-        item { SectionLabel("Reliability log") }
         item {
-            val log = remember(refresh) { DiagLog.read(context).takeLast(40).asReversed() }
-            AppCard {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "When each alarm was due vs. when it fired, newest first. LATE means over a minute late.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    if (log.isEmpty()) Text("Nothing yet.", style = MaterialTheme.typography.bodySmall)
-                    for (line in log) {
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Reliability log") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                val log = remember(refresh) { DiagLog.read(context).takeLast(40).asReversed() }
+                SectionCard {
+                    Column {
                         Text(
-                            line,
+                            "When each alarm was due vs. when it fired, newest first. LATE means over a minute late.",
                             style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = if (" LATE" in line) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                    if (log.isNotEmpty()) {
-                        TextButton(onClick = { DiagLog.clear(context); refresh++ }) { Text("Clear log") }
+                        Spacer(Modifier.height(8.dp))
+                        if (log.isEmpty()) Text("Nothing yet.", style = MaterialTheme.typography.bodySmall)
+                        for (line in log) {
+                            Text(
+                                line,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = if (" LATE" in line) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (log.isNotEmpty()) {
+                            TextButton(onClick = { DiagLog.clear(context); refresh++ }) { Text("Clear log") }
+                        }
                     }
                 }
             }
@@ -210,34 +225,34 @@ private fun HealthRow(item: HealthItem, refresh: Int, onChanged: () -> Unit) {
     var confirmed by remember(item.key, refresh) { mutableStateOf(Health.isConfirmed(context, item)) }
     val good = item.ok ?: confirmed
 
-    AppCard {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-            IconBadge(
-                if (good) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-                if (good) SuccessGreen else MaterialTheme.colorScheme.error,
-            )
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(item.title, style = MaterialTheme.typography.titleMedium)
-                Text(item.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val open = {
-                        if (!Health.openFix(context, item)) {
-                            Toast.makeText(context, "Couldn't open that settings page.", Toast.LENGTH_SHORT).show()
-                        }
+    ListRow {
+        StatusIcon(
+            if (good) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+            if (good) SuccessGreen else MaterialTheme.colorScheme.error,
+            size = 24.dp,
+            description = if (good) "OK" else "Needs attention",
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.title, style = MaterialTheme.typography.titleMedium)
+            Text(item.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val open = {
+                    if (!Health.openFix(context, item)) {
+                        Toast.makeText(context, "Couldn't open that settings page.", Toast.LENGTH_SHORT).show()
                     }
-                    if (good) FilledTonalButton(onClick = open) { Text("Settings") }
-                    else Button(onClick = open) { Text("Fix") }
-                    if (item.ok == null) {
-                        Spacer(Modifier.width(8.dp))
-                        Checkbox(checked = confirmed, onCheckedChange = {
-                            confirmed = it
-                            context.app.prefs.setConfirmed(item.key, it)
-                            onChanged()
-                        })
-                        Text("Done", style = MaterialTheme.typography.bodyMedium)
-                    }
+                }
+                if (good) FilledTonalButton(onClick = open) { Text("Settings") }
+                else Button(onClick = open) { Text("Fix") }
+                if (item.ok == null) {
+                    Spacer(Modifier.width(8.dp))
+                    Checkbox(checked = confirmed, onCheckedChange = {
+                        confirmed = it
+                        context.app.prefs.setConfirmed(item.key, it)
+                        onChanged()
+                    })
+                    Text("Done", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

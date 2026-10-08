@@ -10,9 +10,19 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.habitnudge.data.Strictness
+
+/** Small shared spacing scale. Use these instead of inventing new paddings per screen. */
+object AppSpacing {
+    val xs: Dp = 4.dp
+    val sm: Dp = 8.dp
+    val md: Dp = 16.dp
+    val lg: Dp = 24.dp
+    val xl: Dp = 32.dp
+}
 
 /** Facebook-style blue, used across the app, the nudge card, the Takeover screen and the launcher icon. */
 val BrandBlue = Color(0xFF1877F2)
@@ -29,17 +39,17 @@ private val LightColors = lightColorScheme(
     onSecondaryContainer = Color(0xFF172539),
     tertiary = Color(0xFF00897B),
     onTertiary = Color.White,
-    background = Color(0xFFF3F6FB),
+    background = Color.White,
     onBackground = Color(0xFF101828),
-    surface = Color(0xFFF3F6FB),
+    surface = Color.White,
     onSurface = Color(0xFF101828),
-    surfaceVariant = Color(0xFFE4E9F1),
+    surfaceVariant = Color(0xFFEDF0F5),
     onSurfaceVariant = Color(0xFF5A6474),
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF8FAFD),
-    surfaceContainer = Color(0xFFEFF3F9),
-    surfaceContainerHigh = Color(0xFFE9EEF6),
-    surfaceContainerHighest = Color(0xFFE3E9F2),
+    surfaceContainerLowest = Color(0xFFF6F8FB),
+    surfaceContainerLow = Color(0xFFF1F4F8),
+    surfaceContainer = Color(0xFFEBEFF4),
+    surfaceContainerHigh = Color(0xFFE5EAF1),
+    surfaceContainerHighest = Color(0xFFDFE5ED),
     outline = Color(0xFFC3CBD7),
     outlineVariant = Color(0xFFDDE3EC),
     error = Color(0xFFD93025),
@@ -88,10 +98,10 @@ private val AppTypography = base.copy(
 
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(24.dp),
 )
 
 @Composable

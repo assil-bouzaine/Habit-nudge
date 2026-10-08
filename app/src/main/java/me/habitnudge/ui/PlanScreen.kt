@@ -27,10 +27,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -104,8 +104,8 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
 
     Box(modifier) {
         LazyColumn(
-            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             if (selecting || showHeader) {
                 item {
@@ -118,30 +118,32 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
                             onDelete = { confirmDelete = true },
                         )
                     } else {
-                        ScreenHeader(
-                            "Your plan",
-                            when (reminders.size) {
-                                0 -> "Nothing planned yet"
-                                1 -> "1 reminder - long-press to select"
-                                else -> "${reminders.size} reminders - long-press to select"
-                            },
-                        )
+                        Column(Modifier.padding(horizontal = 16.dp)) {
+                            ScreenHeader(
+                                "Your plan",
+                                when (reminders.size) {
+                                    0 -> "Nothing planned yet"
+                                    1 -> "1 reminder - long-press to select"
+                                    else -> "${reminders.size} reminders - long-press to select"
+                                },
+                            )
+                        }
                     }
                 }
             }
             item {
-                AppCard {
-                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FilledTonalIconButton(onClick = { onDayChange(day - 1) }, enabled = day > today()) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { onDayChange(day - 1) }, enabled = day > today()) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day")
                         }
                         // Tap the date to jump anywhere with a calendar.
                         Column(
                             Modifier
                                 .weight(1f)
-                                .clip(MaterialTheme.shapes.medium)
+                                .clip(MaterialTheme.shapes.small)
                                 .clickable { pickDate(context, day, onDayChange) }
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = 6.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(dayTitle(day), style = MaterialTheme.typography.titleLarge)
@@ -155,7 +157,7 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
                                 Text(dayDate(day), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        FilledTonalIconButton(onClick = { onDayChange(day + 1) }) {
+                        IconButton(onClick = { onDayChange(day + 1) }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day")
                         }
                     }
@@ -165,54 +167,58 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
                             modifier = Modifier.align(Alignment.CenterHorizontally),
                         ) { Text("Back to today") }
                     }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
             if (!isToday && previousCount > 0) {
                 item {
                     FilledTonalButton(
                         onClick = { if (reminders.isEmpty()) copy(replace = false) else confirmCopy = true },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(48.dp),
                     ) { Text("Copy ${dayRef(day - 1)}'s plan ($previousCount)") }
                 }
             }
             if (reminders.isEmpty()) {
                 item {
-                    EmptyState(
-                        "🗓️", // calendar emoji
-                        "A blank day",
-                        "Tap Add to plan a reminder for ${dayRef(day)}.",
-                    )
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        EmptyState(
+                            "🗓️", // calendar emoji
+                            "A blank day",
+                            "Tap Add to plan a reminder for ${dayRef(day)}.",
+                        )
+                    }
                 }
             }
             items(reminders, key = { it.id }) { r ->
                 val past = isToday && r.minuteOfDay <= nowMinute()
-                Row(Modifier.alpha(if (past) 0.55f else 1f), verticalAlignment = Alignment.Top) {
+                val isSelected = r.id in selected
+                ListRow(
+                    modifier = Modifier.alpha(if (past) 0.55f else 1f),
+                    onClick = { if (selecting) toggle(r.id) else editing = r },
+                    onLongClick = { toggle(r.id) },
+                ) {
                     Text(
                         formatMinute(r.minuteOfDay),
                         style = MaterialTheme.typography.titleSmall,
                         color = if (past) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(76.dp).padding(top = 18.dp, start = 4.dp),
+                        modifier = Modifier.width(64.dp),
                     )
-                    val isSelected = r.id in selected
-                    AppCard(
-                        Modifier.weight(1f),
-                        onClick = { if (selecting) toggle(r.id) else editing = r },
-                        onLongClick = { toggle(r.id) },
-                        selected = isSelected,
-                    ) {
-                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(r.message, style = MaterialTheme.typography.titleMedium)
-                                Spacer(Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    StrictnessPill(r.style.strictness)
-                                    if (past) Pill("Past", MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                            if (selecting) {
-                                Checkbox(checked = isSelected, onCheckedChange = { toggle(r.id) })
+                    Column(Modifier.weight(1f)) {
+                        Text(r.message, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            StrictnessLabel(r.style.strictness)
+                            if (past) {
+                                Text(
+                                    "Past",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
+                    }
+                    if (selecting) {
+                        Checkbox(checked = isSelected, onCheckedChange = { toggle(r.id) })
                     }
                 }
             }
@@ -286,7 +292,7 @@ private fun SelectionBar(
     onSelectAll: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Stop selecting") }
         Text("$count selected", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
         if (!allSelected) TextButton(onClick = onSelectAll) { Text("Select all") }
