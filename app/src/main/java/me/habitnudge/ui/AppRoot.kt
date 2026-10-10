@@ -4,11 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -31,10 +26,10 @@ import me.habitnudge.app
 import me.habitnudge.schedule.Engine
 
 enum class Tab(val label: String, val icon: ImageVector) {
-    REMINDERS("Reminders", Icons.Filled.Notifications),
-    NUDGE("Nudge", Icons.Filled.Face),
-    STATS("Stats", Icons.Filled.Star),
-    NOTES("Notes", Icons.Filled.Edit),
+    REMINDERS("Reminders", Glyphs.Alarm),
+    NUDGE("Nudge", Glyphs.Hourglass),
+    STATS("Stats", Glyphs.BarChart),
+    NOTES("Notes", Glyphs.Notes),
 }
 
 /** How to reach Setup from any screen header, plus whether it has something to warn about. */

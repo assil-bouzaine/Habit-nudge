@@ -10,27 +10,32 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import java.time.format.TextStyle
+import java.util.Locale
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,7 +56,6 @@ import androidx.room.withTransaction
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
 import me.habitnudge.HabitApp
 import me.habitnudge.app
@@ -73,9 +77,6 @@ fun dayTitle(day: Long): String = when (day - today()) {
 
 /** For use mid-sentence: "today", "tomorrow", or a weekday name. */
 private fun dayRef(day: Long): String = if (day - today() in 0L..1L) dayTitle(day).lowercase() else dayTitle(day)
-
-private fun dayDate(day: Long): String =
-    LocalDate.ofEpochDay(day).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
 
 @Composable
 fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modifier, showHeader: Boolean = true) {
@@ -123,68 +124,30 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
                                 "Your plan",
                                 when (reminders.size) {
                                     0 -> "Nothing planned yet"
-                                    1 -> "1 reminder - long-press to select"
-                                    else -> "${reminders.size} reminders - long-press to select"
+                                    1 -> "1 reminder"
+                                    else -> "${reminders.size} reminders"
                                 },
                             )
                         }
                     }
                 }
             }
-            item {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { onDayChange(day - 1) }, enabled = day > today()) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day")
-                        }
-                        // Tap the date to jump anywhere with a calendar.
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .clip(MaterialTheme.shapes.small)
-                                .clickable { pickDate(context, day, onDayChange) }
-                                .padding(vertical = 6.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(dayTitle(day), style = MaterialTheme.typography.titleLarge)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.DateRange, contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(dayDate(day), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        IconButton(onClick = { onDayChange(day + 1) }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day")
-                        }
-                    }
-                    if (!isToday) {
-                        TextButton(
-                            onClick = { onDayChange(today()) },
-                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                        ) { Text("Back to today") }
-                    }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
-            }
+            item { DayStrip(day, onDayChange) }
             if (!isToday && previousCount > 0) {
                 item {
-                    FilledTonalButton(
+                    OutlinedButton(
                         onClick = { if (reminders.isEmpty()) copy(replace = false) else confirmCopy = true },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(48.dp),
-                    ) { Text("Copy ${dayRef(day - 1)}'s plan ($previousCount)") }
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(44.dp),
+                    ) { Text("Copy ${dayRef(day - 1)}'s plan · $previousCount") }
                 }
             }
             if (reminders.isEmpty()) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp)) {
                         EmptyState(
-                            "🗓️", // calendar emoji
-                            "A blank day",
-                            "Tap Add to plan a reminder for ${dayRef(day)}.",
+                            Icons.Filled.DateRange,
+                            "Nothing planned",
+                            "Tap New to plan a reminder for ${dayRef(day)}.",
                         )
                     }
                 }
@@ -230,7 +193,7 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
                     editing = PlannedReminder(epochDay = day, minuteOfDay = nextHour, message = "")
                 },
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Add") },
+                text = { Text("New") },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
@@ -283,6 +246,72 @@ fun PlanScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier = Modi
     }
 }
 
+/**
+ * Two weeks of days from today as a scrollable strip (further out via the calendar button).
+ * The chosen day is filled; today is marked in blue when it isn't the chosen one.
+ */
+@Composable
+private fun DayStrip(day: Long, onDayChange: (Long) -> Unit) {
+    val context = LocalContext.current
+    val first = today()
+    val days = remember(first, day) { (first..maxOf(first + 13, day)).toList() }
+    val listState = rememberLazyListState()
+    // Bring the chosen day into view (e.g. after picking one from the calendar), with a little left context.
+    LaunchedEffect(day) {
+        val index = (day - first).toInt()
+        val info = listState.layoutInfo
+        val fullyVisible = info.visibleItemsInfo.any {
+            it.index == index && it.offset >= 0 && it.offset + it.size <= info.viewportEndOffset
+        }
+        if (!fullyVisible) listState.animateScrollToItem((index - 2).coerceAtLeast(0))
+    }
+    Row(Modifier.padding(top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        LazyRow(
+            state = listState,
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 16.dp, end = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            items(days, key = { it }) { d -> DayChip(d, selected = d == day, isToday = d == first) { onDayChange(d) } }
+        }
+        IconButton(onClick = { pickDate(context, day, onDayChange) }, modifier = Modifier.padding(end = 4.dp)) {
+            Icon(Icons.Filled.DateRange, contentDescription = "Pick a date", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun DayChip(day: Long, selected: Boolean, isToday: Boolean, onClick: () -> Unit) {
+    val date = LocalDate.ofEpochDay(day)
+    val fg = when {
+        selected -> MaterialTheme.colorScheme.onPrimary
+        isToday -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Column(
+        Modifier
+            .width(46.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            if (isToday) "Today" else date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected || isToday) fg else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        Text(
+            "${date.dayOfMonth}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = if (selected || isToday) FontWeight.Bold else FontWeight.Medium,
+            color = fg,
+        )
+    }
+}
+
 /** Replaces the header while selecting: close, count, select all, delete. */
 @Composable
 private fun SelectionBar(
@@ -294,7 +323,7 @@ private fun SelectionBar(
 ) {
     Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Stop selecting") }
-        Text("$count selected", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+        Text("$count selected", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
         if (!allSelected) TextButton(onClick = onSelectAll) { Text("Select all") }
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
@@ -328,7 +357,7 @@ private fun PlannedEditor(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        title = { Text(if (initial.id == 0L) "New reminder - ${dayTitle(r.epochDay)}" else "Edit reminder") },
+        title = { Text(if (initial.id == 0L) "New reminder · ${dayTitle(r.epochDay)}" else "Edit reminder") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

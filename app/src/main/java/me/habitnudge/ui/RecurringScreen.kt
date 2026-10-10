@@ -84,7 +84,7 @@ fun RecurringScreen(modifier: Modifier = Modifier, showHeader: Boolean = true) {
             if (rules.isEmpty()) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp)) {
-                        EmptyState("🔁", "Nothing repeating", "Add things like \"drink water\" every 90 minutes.")
+                        EmptyState(Glyphs.Repeat, "Nothing repeating", "Things like \"drink water\" every 90 minutes.")
                     }
                 }
             }
@@ -138,8 +138,8 @@ fun RecurringScreen(modifier: Modifier = Modifier, showHeader: Boolean = true) {
 }
 
 private fun RecurringRule.timeSummary(): String {
-    val time = if (intervalMin == null) "At ${formatMinute(startMinute)}"
-    else "Every $intervalMin min, ${formatMinute(startMinute)} to ${formatMinute(endMinute)}"
+    val time = if (intervalMin == null) formatMinute(startMinute)
+    else "Every $intervalMin min · ${formatMinute(startMinute)}–${formatMinute(endMinute)}"
     return "$time · ${daysSummary(daysMask)}"
 }
 

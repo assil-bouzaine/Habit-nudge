@@ -16,7 +16,7 @@ GitHub: https://github.com/assil-bouzaine/Habit-nudge (public). Commit identity 
 - **Free tools and libraries only.**
 - **Keep it light:** it's a low-end phone.
 - **The app-open nudge must never *block* an app.** It always offers a way to stay ("Stay anyway"), though that button may be delayed by a countdown.
-- **Ask before taking `adb screencap` screenshots.** It's a personal phone, and a screenshot once captured a private video call.
+- **Ask before taking `adb screencap` screenshots.** It's a personal phone, and screenshots have captured a private video call twice (the second time on 2026-10-10, as a floating call window over the app *after* permission was given). Permission covers the moment it was given, not a whole session. Before each batch, check for a call or floating window (`adb shell dumpsys audio | grep -i 'mode'`, `adb shell dumpsys window | grep -i pip`), and if in doubt ask again. If one gets captured anyway, stop, delete the files and say so.
 
 ## Build, install, test
 
@@ -91,7 +91,10 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 - **Sound:** the tone is started by the Engine, not the activity, because EMUI keeps the card *paused* over the lock screen.
 - **Leaving it:** Back is blocked, and Home or recents relaunches it.
 - **Calls:** during a call (audio mode IN_CALL / IN_COMMUNICATION / RINGTONE) it is deferred and retried every minute.
-- **Two looks:** plan/recurring Takeovers are a dark full-bleed alarm card with a red accent and a clock face; note Takeovers (occurrence key `note:…`) are a full light paper sheet with a teal accent (`AlarmTakeover` vs `NoteTakeover` in `TakeoverActivity.kt`).
+- **Two looks, told apart at a glance** (`AlarmTakeover` vs `NoteTakeover` in `TakeoverActivity.kt`, chosen by occurrence key `note:…`):
+  - plan/recurring = **alarm**: full-bleed red gradient, shaking alarm glyph, huge thin clock time, bold message, a round Done whose ring fills during the countdown and then pulses outward like an incoming call
+  - notes = **sticky note**: cream desk, a tilted yellow note with tape that drops in and settles, serif ink text, a long pill Done that fills amber during the countdown and turns ink-dark when unlocked
+- **Preview:** Setup → "Takeover looks" opens either card with a sample alert (`TakeoverActivity.preview`): no tone, no database row, Done/Reschedule just close it, and a real Takeover firing replaces it.
 
 **Reschedule ("remind me later")** is on every reminder notification and on the Takeover card. On the card it's locked by the same countdown as Done. Choosing a time closes the alert and adds a `PlannedReminder` at the new time, with the same message, strictness and opens-planner flag (`Engine.rescheduleReminder`).
 
@@ -141,11 +144,14 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 ### UI conventions
 
 - **Colours:** brand blue `#1877F2` (`BrandBlue` in `ui/Theme.kt`), with light and dark schemes.
-- **Shared components:** white `AppCard`s on a tinted background, `ScreenHeader` (title-line-aligned icons: `leading` slot e.g. a back arrow, `trailing` slot e.g. the Notes lock, plus the Setup gear with its red dot unless `showGear = false`), `Pill`, `StrictnessPill`, `IconBadge`, `SectionLabel`, `EmptyState` (`ui/Components.kt`).
-- **Time picking:** one typed 12-hour AM/PM dialog (`DigitalTimeDialog` in `ui/Widgets.kt`), used for plan, recurring, reschedule, bedtime and notes — no analog clock anywhere.
-- **Master pause UI:** a bell toggle in every `ScreenHeader` (via `LocalPause`) plus a slim "Alerts paused — nothing will ring" banner with Resume above the tab content (`PausedBanner` in `AppRoot.kt`).
+- **Shared components** (`ui/Components.kt`): `ScreenHeader` (headline title + one-line subtitle; `leading` slot e.g. a back arrow, `trailing` slot e.g. the Notes lock, then the pause bell and the Setup gear with its red dot unless `showGear = false`), `ListRow` for lists, `SectionCard` for settings groups, `SegmentedControl` (the only segmented/radio-style switch: screen switches, AM/PM, note kind, strictness), `StrictnessLabel`/`StrictnessDot`, `SectionLabel`, `EmptyState` (icon + title + body).
+- **Strictness picking:** always `StrictnessPicker` (`ui/Widgets.kt`), a 4-way `SegmentedControl` with the level's `description()` below it — reminders, notes and the Setup test all use it.
+- **Buttons:** one filled primary action per screen at most (Save, Turn on, Test); previews and secondary actions are outlined or text buttons. Every list tab uses the same extended FAB labelled "New".
+- **Time picking:** one typed 12-hour AM/PM dialog (`DigitalTimeDialog` in `ui/Widgets.kt`), opened via `TimeButton`, used for plan, recurring, reschedule, bedtime and notes — no analog clock anywhere. Times are always shown with `formatMinute` (locale 12-hour), never hand-formatted "09:00".
+- **Master pause UI:** a bell icon in every `ScreenHeader` (via `LocalPause`; turns into a red bell-off while paused) plus a slim red "Alerts paused — nothing will ring" banner with Resume above the tab content (`PausedBanner`).
+- **Plan day picking:** a horizontal strip of day chips from today (two weeks, more via the calendar button), not arrows.
 - **Strictness colours:** Gentle green, Sticky blue, Nagging amber, Takeover red.
-- **Icons:** only the `material-icons-core` set is available (no extended icons), so emoji are used where no core icon fits (🌙 🔥 🏆).
+- **Icons:** only `material-icons-core` is available. Missing ones (alarm, hourglass, bar chart, notes, repeat, bell-off) are drawn from Material path data in `ui/Glyphs.kt` — add new ones there. **No emoji in the UI.**
 - **Status never by colour alone:** charts follow the dataviz rules, with a glyph or legend for every status colour.
 - **Writes** go through `app.scope` (not the composable scope), followed by `Engine.reschedule(app)` when reminders change.
 
@@ -187,5 +193,10 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
     - Notes polish: one-line note rows, Pause/Resume as a text button beside the bin, secrets shown alone after unlock (60 s session)
     - Navigation: 6 tabs → 4; Plan + Recurring merged behind a segmented control (`RemindersScreen`); Setup behind a gear in every header (`LocalSetup`, `showSetup`, back arrow on the left)
     - `ScreenHeader` gained `leading`/`trailing` slots with title-line alignment
+14. **UI de-slop + Takeover redesign:**
+    - no emoji; custom glyphs (`ui/Glyphs.kt`) for tab icons, bell-off and empty states
+    - one `SegmentedControl` and one `StrictnessPicker` everywhere; pause toggle is a bell icon
+    - day-chip strip on the Plan tab; 12-hour times in Notes; quieter Nudge and Stats screens
+    - Takeover split into a red alarm and a yellow sticky note, previewable from Setup
 
 **Not yet done:** the reboot test (a Sticky surviving a restart) was never run on the phone, and there's been no 24-hour reliability run with the log pulled afterwards.

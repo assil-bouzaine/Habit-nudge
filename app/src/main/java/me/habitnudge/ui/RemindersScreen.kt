@@ -3,13 +3,8 @@ package me.habitnudge.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,35 +27,31 @@ fun RemindersScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier =
     val subtitle = when (seg) {
         Segment.DAY -> {
             val count by remember(day) { app.db.planned().forDay(day) }.collectAsState(initial = emptyList())
-            when (count.size) {
-                0 -> "Nothing planned yet"
-                1 -> "1 reminder - long-press to select"
-                else -> "${count.size} reminders - long-press to select"
+            "${dayTitle(day)} · " + when (count.size) {
+                0 -> "nothing planned"
+                1 -> "1 reminder"
+                else -> "${count.size} reminders"
             }
         }
         Segment.REPEAT -> {
             val rules by app.db.rules().all().collectAsState(initial = emptyList())
-            if (rules.isEmpty()) "Reminders that repeat every day"
+            if (rules.isEmpty()) "Nothing repeating yet"
             else "${rules.count { it.enabled }} of ${rules.size} on"
         }
     }
 
     Column(modifier) {
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        // Same 8dp top as the LazyColumn tabs, so titles line up across tabs.
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
             ScreenHeader("Reminders", subtitle)
         }
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            SegmentedButton(
-                selected = seg == Segment.DAY,
-                onClick = { seg = Segment.DAY },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            ) { Text("Day plan") }
-            SegmentedButton(
-                selected = seg == Segment.REPEAT,
-                onClick = { seg = Segment.REPEAT },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            ) { Text("Recurring") }
-        }
+        SegmentedControl(
+            options = Segment.entries,
+            selected = seg,
+            onSelect = { seg = it },
+            label = { it.label },
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
         Spacer(Modifier.height(4.dp))
         when (seg) {
             Segment.DAY -> PlanScreen(day, onDayChange, Modifier.fillMaxSize(), showHeader = false)
@@ -69,4 +60,4 @@ fun RemindersScreen(day: Long, onDayChange: (Long) -> Unit, modifier: Modifier =
     }
 }
 
-private enum class Segment { DAY, REPEAT }
+private enum class Segment(val label: String) { DAY("Day plan"), REPEAT("Recurring") }

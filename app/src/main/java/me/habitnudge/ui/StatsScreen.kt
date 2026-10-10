@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -106,7 +108,7 @@ fun StatsScreen(modifier: Modifier = Modifier) {
     ) {
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                ScreenHeader("Stats", "Daily limit: $limit min across your watched apps")
+                ScreenHeader("Stats", "Time in your watched apps")
             }
         }
 
@@ -170,9 +172,11 @@ fun StatsScreen(modifier: Modifier = Modifier) {
                             strokeCap = StrokeCap.Round,
                             modifier = Modifier.fillMaxWidth().height(8.dp),
                         )
-                        TextButton(onClick = { editingLimit = true }, modifier = Modifier.padding(top = 4.dp)) {
-                            Text("Change daily limit")
-                        }
+                        TextButton(
+                            onClick = { editingLimit = true },
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(top = 4.dp),
+                        ) { Text("Change daily limit") }
                     }
                 }
             }
@@ -257,7 +261,7 @@ fun StatsScreen(modifier: Modifier = Modifier) {
         if (todayRows.isEmpty()) {
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    EmptyState("🌱", "Clean so far", "You haven't opened a watched app today.")
+                    EmptyState(Icons.Filled.CheckCircle, "Clean so far", "You haven't opened a watched app today.")
                 }
             }
         }
@@ -373,7 +377,6 @@ private fun CalendarCell(r: Stats.DayResult, selected: Boolean, onClick: () -> U
             .then(
                 when {
                     selected -> Modifier.border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary), shape)
-                    r.status == DayStatus.NOT_TRACKED -> Modifier.border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape)
                     else -> Modifier
                 },
             )
@@ -385,7 +388,7 @@ private fun CalendarCell(r: Stats.DayResult, selected: Boolean, onClick: () -> U
             "${LocalDate.ofEpochDay(r.day).dayOfMonth}",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (r.status == DayStatus.TODAY) FontWeight.Bold else FontWeight.Normal,
-            color = if (r.status == DayStatus.NOT_TRACKED) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+            color = if (r.status == DayStatus.NOT_TRACKED) MaterialTheme.colorScheme.outline.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface,
         )
         if (glyph.isNotEmpty()) Text(glyph, color = fg, fontSize = 11.sp, fontWeight = FontWeight.Bold, lineHeight = 11.sp)
     }

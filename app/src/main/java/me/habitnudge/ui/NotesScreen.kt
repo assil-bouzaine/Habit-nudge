@@ -4,8 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,15 +26,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -55,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -156,15 +149,15 @@ fun NotesScreen(modifier: Modifier = Modifier) {
                     Column(Modifier.padding(horizontal = 16.dp)) {
                         if (isSecretUnlocked) {
                             EmptyState(
-                                emoji = "🔒",
+                                icon = Icons.Default.Lock,
                                 title = "No private notes yet",
-                                body = "Tap + and choose Secret to write one",
+                                body = "Tap New to write one. It stays behind your PIN.",
                             )
                         } else {
                             EmptyState(
-                                emoji = "📝",
+                                icon = Glyphs.Notes,
                                 title = "No notes yet",
-                                body = "Tap + to write your first note",
+                                body = "Tap New to write one. Add a reminder to see it again later.",
                             )
                         }
                     }
@@ -184,12 +177,14 @@ fun NotesScreen(modifier: Modifier = Modifier) {
         }
 
         // New note FAB: tap it, write, then choose regular/secret and reminders inside the editor.
-        FloatingActionButton(
+        ExtendedFloatingActionButton(
             onClick = ::openNewNote,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "New note")
-        }
+            icon = { Icon(Icons.Default.Add, contentDescription = null) },
+            text = { Text("New") },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        )
     }
 
     if (showPinSetupDialog) {
@@ -264,7 +259,7 @@ fun NotesScreen(modifier: Modifier = Modifier) {
                             editingNote = null
                         }
                     },
-                ) { Text("Delete") }
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { noteToDelete = null }) { Text("Cancel") }
@@ -289,13 +284,20 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePaus
             Spacer(Modifier.height(2.dp))
             Text(
                 buildString {
-                    if (note.isSecret) append("Secret · ")
-                    if (config == null) append("No reminder")
-                    else if (config.isPaused) append("Paused")
-                    else if (config.timesPerDay > 1) {
-                        append("Every ${config.intervalDays}d · ${config.timesPerDay}× ${formatTime(config.windowStartMin)}–${formatTime(config.windowEndMin)} · ${config.style.strictness.label()}")
-                    } else append("Every ${config.intervalDays}d · ${formatTime(config.timeOfDay)} · ${config.style.strictness.label()}")
-                    append(" · ${formatRelativeTime(note.updatedAt)}")
+                    append(formatRelativeTime(note.updatedAt))
+                    when {
+                        config == null -> {}
+                        config.isPaused -> append(" · Reminder paused")
+                        else -> {
+                            append(" · ")
+                            append(if (config.intervalDays == 1) "Daily" else "Every ${config.intervalDays} days")
+                            if (config.timesPerDay > 1) {
+                                append(", ${config.timesPerDay}× ${formatMinute(config.windowStartMin)}–${formatMinute(config.windowEndMin)}")
+                            } else {
+                                append(" at ${formatMinute(config.timeOfDay)}")
+                            }
+                        }
+                    }
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -321,10 +323,6 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePaus
         }
     }
 }
-
-/** Compact "09:00" for a minute-of-day value. */
-fun formatTime(minuteOfDay: Int): String =
-    String.format("%02d:%02d", minuteOfDay / 60, minuteOfDay % 60)
 
 fun formatRelativeTime(timestamp: Long): String {
     val diff = System.currentTimeMillis() - timestamp
@@ -451,22 +449,20 @@ fun NoteEditorDialog(
     var windowEnd by remember { mutableStateOf(note?.reminderConfig?.windowEndMin ?: (22 * 60)) }
     var isPaused by remember { mutableStateOf(note?.reminderConfig?.isPaused ?: false) }
     var strictness by remember { mutableStateOf(note?.reminderConfig?.style?.strictness ?: Strictness.GENTLE) }
-    var showTimePicker by remember { mutableStateOf(false) }
     // Several random times a day inside a window, or once at a fixed time.
     val multi = timesPerDay > 1
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
             modifier = Modifier.fillMaxWidth().heightIn(max = 720.dp),
         ) {
             Column(
                 Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
+                    .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
@@ -483,27 +479,15 @@ fun NoteEditorDialog(
                     maxLines = 10,
                 )
 
-                // Regular / Secret selector.
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    SegmentedCard(
-                        modifier = Modifier.weight(1f),
-                        label = "Regular",
-                        selected = !secretToggle,
-                        onClick = { secretToggle = false },
-                    )
-                    SegmentedCard(
-                        modifier = Modifier.weight(1f),
-                        label = "Secret",
-                        selected = secretToggle,
-                        onClick = {
-                            secretToggle = true
-                            onNeedPin()
-                        },
-                    )
-                }
+                SegmentedControl(
+                    options = listOf(false, true),
+                    selected = secretToggle,
+                    onSelect = { secret ->
+                        secretToggle = secret
+                        if (secret) onNeedPin()
+                    },
+                    label = { if (it) "Secret" else "Regular" },
+                )
 
                 if (secretToggle) {
                     Text(
@@ -514,7 +498,7 @@ fun NoteEditorDialog(
                 }
 
                 if (!secretToggle) {
-                    HorizontalDivider()
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                     Row(
                         Modifier.fillMaxWidth(),
@@ -545,31 +529,17 @@ fun NoteEditorDialog(
                                 )
                             }
 
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                SegmentedCard(
-                                    modifier = Modifier.weight(1f),
-                                    label = "Once a day",
-                                    selected = !multi,
-                                    onClick = { timesPerDay = 1 },
-                                )
-                                SegmentedCard(
-                                    modifier = Modifier.weight(1f),
-                                    label = "Several times",
-                                    selected = multi,
-                                    onClick = { if (!multi) timesPerDay = 5 },
-                                )
-                            }
+                            SegmentedControl(
+                                options = listOf(false, true),
+                                selected = multi,
+                                onSelect = { several ->
+                                    if (!several) timesPerDay = 1 else if (!multi) timesPerDay = 5
+                                },
+                                label = { if (it) "Several times" else "Once a day" },
+                            )
 
                             if (!multi) {
-                                OutlinedButton(
-                                    onClick = { showTimePicker = true },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text("Remind at ${formatTime(timeOfDay)}", style = MaterialTheme.typography.bodyMedium)
-                                }
+                                TimeButton("At", timeOfDay) { timeOfDay = it }
                             } else {
                                 Text(
                                     "Picks random times inside the window, a different set each day.",
@@ -593,8 +563,8 @@ fun NoteEditorDialog(
                                 }
                             }
 
-                            Text("Strictness", style = MaterialTheme.typography.labelLarge)
-                            StrictnessSelector(strictness = strictness, onSelect = { strictness = it })
+                            Text("Strictness", style = MaterialTheme.typography.titleSmall)
+                            StrictnessPicker(strictness) { strictness = it }
 
                             if (note?.reminderConfig != null) {
                                 Row(
@@ -616,8 +586,8 @@ fun NoteEditorDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (onDelete != null) {
-                        IconButton(onClick = { onDismiss(); onDelete() }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        TextButton(onClick = { onDismiss(); onDelete() }) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
                         }
                     }
                     Spacer(Modifier.weight(1f))
@@ -671,59 +641,4 @@ fun NoteEditorDialog(
             }
         }
     }
-
-    if (showTimePicker) {
-        DigitalTimeDialog(
-            initialMinute = timeOfDay,
-            onConfirm = { timeOfDay = it; showTimePicker = false },
-            onDismiss = { showTimePicker = false },
-        )
-    }
-}
-
-@Composable
-private fun SegmentedCard(modifier: Modifier, label: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = if (selected) {
-        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-    } else {
-        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    }
-    Card(onClick = onClick, colors = colors, modifier = modifier) {
-        Text(
-            label,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            style = MaterialTheme.typography.titleSmall,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun StrictnessSelector(strictness: Strictness, onSelect: (Strictness) -> Unit) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Strictness.entries.forEach { s ->
-            FilterChip(
-                selected = strictness == s,
-                onClick = { onSelect(s) },
-                label = { Text(s.label()) },
-            )
-        }
-    }
-    Text(
-        text = when (strictness) {
-            Strictness.GENTLE -> "A quiet notification."
-            Strictness.STICKY -> "An ongoing heads-up with a Done action."
-            Strictness.NAGGING -> "Repeats until you stop it."
-            Strictness.TAKEOVER -> "A full-screen card that rings and locks the countdown."
-        },
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp),
-    )
 }

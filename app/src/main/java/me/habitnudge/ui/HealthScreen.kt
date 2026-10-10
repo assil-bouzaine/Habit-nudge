@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -21,12 +20,12 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import me.habitnudge.takeover.TakeoverActivity
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -151,26 +150,14 @@ fun HealthScreen(modifier: Modifier = Modifier, onClose: () -> Unit = {}) {
                     Column {
                         Text("Test reminder", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Fires in 1 minute; lock the phone and wait. A Nagging test repeats every minute and " +
+                            "Fires in 1 minute: lock the phone and wait. A Nagging test repeats every minute and " +
                                 "becomes a Takeover after 3 ignored alerts. A Takeover test's Done unlocks after 10 seconds.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.height(8.dp))
-                        for (level in TESTABLE) {
-                            Row(
-                                Modifier.fillMaxWidth().selectable(selected = testLevel == level, onClick = { testLevel = level }),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = testLevel == level,
-                                    onClick = null,
-                                    colors = RadioButtonDefaults.colors(selectedColor = level.color()),
-                                )
-                                Text(level.label(), Modifier.padding(start = 8.dp, top = 10.dp, bottom = 10.dp), color = level.color())
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
+                        StrictnessPicker(testLevel) { testLevel = it }
+                        Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = {
                             if (context.app.prefs.alertsPaused) {
@@ -185,6 +172,30 @@ fun HealthScreen(modifier: Modifier = Modifier, onClose: () -> Unit = {}) {
                         },
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                     ) { Text("Test ${testLevel.label()} in 1 minute") }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                SectionCard {
+                    Text("Takeover looks", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "See the full-screen card without waiting for an alert. Silent; Done closes it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { TakeoverActivity.preview(context, note = false) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Reminder") }
+                        OutlinedButton(
+                            onClick = { TakeoverActivity.preview(context, note = true) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Note") }
                     }
                 }
             }
@@ -263,7 +274,6 @@ private fun HealthRow(item: HealthItem, refresh: Int, onChanged: () -> Unit) {
     }
 }
 
-private val TESTABLE = Strictness.entries
 
 fun Strictness.label(): String = name.lowercase().replaceFirstChar { it.uppercase() }
 

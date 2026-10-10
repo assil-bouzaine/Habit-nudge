@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -17,11 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -87,7 +81,7 @@ fun DigitalTimeDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDismiss: (
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        title = { Text("Time") },
+        title = { Text("Pick a time") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -115,23 +109,19 @@ fun DigitalTimeDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDismiss: (
                         modifier = Modifier.width(96.dp),
                     )
                 }
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = !isPm,
-                        onClick = { isPm = false },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                    ) { Text("AM") }
-                    SegmentedButton(
-                        selected = isPm,
-                        onClick = { isPm = true },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                    ) { Text("PM") }
-                }
-                Text(
-                    if (valid) "12-hour time." else "Hour 1–12, minute 0–59.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                SegmentedControl(
+                    options = listOf(false, true),
+                    selected = isPm,
+                    onSelect = { isPm = it },
+                    label = { if (it) "PM" else "AM" },
                 )
+                if (!valid) {
+                    Text(
+                        "Hour 1–12, minute 0–59.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         },
         confirmButton = {
@@ -166,35 +156,37 @@ fun NumberField(label: String, value: Int, min: Int, max: Int, onValue: (Int) ->
 }
 
 fun Strictness.description(): String = when (this) {
-    Strictness.GENTLE -> "Normal notification with sound"
-    Strictness.STICKY -> "Pops up and stays until you tap Done"
-    Strictness.NAGGING -> "Like Sticky, and alerts again until Done"
-    Strictness.TAKEOVER -> "Full-screen card, wakes the phone like an alarm"
+    Strictness.GENTLE -> "A normal notification. Swipe it away and it's gone."
+    Strictness.STICKY -> "Pops up and stays until you tap Done."
+    Strictness.NAGGING -> "Like Sticky, and rings again every few minutes until Done."
+    Strictness.TAKEOVER -> "Full-screen card that wakes the phone and rings like an alarm."
+}
+
+/** Four-way strictness switch with a one-line explanation of the chosen level. */
+@Composable
+fun StrictnessPicker(selected: Strictness, onSelect: (Strictness) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SegmentedControl(
+            options = Strictness.entries,
+            selected = selected,
+            onSelect = onSelect,
+            label = { it.label() },
+            leading = { StrictnessDot(it, 6.dp) },
+        )
+        Text(
+            selected.description(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+    }
 }
 
 /** Strictness picker plus the options that apply to the chosen level. Shared by recurring and planned reminders. */
 @Composable
 fun StyleEditor(style: AlertStyle, onChange: (AlertStyle) -> Unit) {
-    Text("Strictness", style = MaterialTheme.typography.titleSmall)
-    for (level in Strictness.entries) {
-        Row(
-            Modifier.fillMaxWidth().selectable(
-                selected = style.strictness == level,
-                onClick = { onChange(style.copy(strictness = level)) },
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RadioButton(
-                selected = style.strictness == level,
-                onClick = null,
-                colors = RadioButtonDefaults.colors(selectedColor = level.color()),
-            )
-            Column(Modifier.padding(vertical = 6.dp)) {
-                Text(level.label(), style = MaterialTheme.typography.titleSmall, color = level.color())
-                Text(level.description(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
+    Text("Strictness", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    StrictnessPicker(style.strictness) { onChange(style.copy(strictness = it)) }
     when (style.strictness) {
         Strictness.NAGGING -> {
             NumberField("Alert again every (minutes)", style.nagEveryMin, 1, 120) {
