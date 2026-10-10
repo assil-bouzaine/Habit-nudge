@@ -5,13 +5,31 @@ import java.time.LocalDate
 import java.time.ZoneId
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.SnapPosition
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledTonalButton
@@ -65,74 +83,136 @@ fun TimeButton(label: String, minuteOfDay: Int, onPicked: (Int) -> Unit) {
 }
 
 /**
- * The one time picker in the app: 12-hour, typed, no analog clock.
- * Hour and minute are numeric fields plus an AM/PM switch.
+ * The one time picker in the app: three scroll wheels (hour, minute, AM/PM) that snap to the middle row.
+ * Hour and minute wrap around; AM/PM is just two rows.
  */
 @Composable
 fun DigitalTimeDialog(initialMinute: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
     val initH24 = initialMinute / 60
-    var hour by remember { mutableStateOf((if (initH24 % 12 == 0) 12 else initH24 % 12).toString()) }
-    var minute by remember { mutableStateOf(String.format("%02d", initialMinute % 60)) }
+    var hour12 by remember { mutableIntStateOf(if (initH24 % 12 == 0) 12 else initH24 % 12) }
+    var minute by remember { mutableIntStateOf(initialMinute % 60) }
     var isPm by remember { mutableStateOf(initH24 >= 12) }
-    val h = hour.toIntOrNull()
-    val m = minute.toIntOrNull()
-    val valid = h != null && m != null && h in 1..12 && m in 0..59
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         title = { Text("Pick a time") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = hour,
-                        onValueChange = { hour = it.filter(Char::isDigit).take(2) },
-                        label = { Text("Hour") },
-                        placeholder = { Text("2") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = !valid,
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.width(96.dp),
-                    )
-                    Text(":", style = MaterialTheme.typography.headlineSmall)
-                    OutlinedTextField(
-                        value = minute,
-                        onValueChange = { minute = it.filter(Char::isDigit).take(2) },
-                        label = { Text("Minute") },
-                        placeholder = { Text("30") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = !valid,
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.width(96.dp),
-                    )
-                }
-                SegmentedControl(
-                    options = listOf(false, true),
-                    selected = isPm,
-                    onSelect = { isPm = it },
-                    label = { if (it) "PM" else "AM" },
+            Box(Modifier.fillMaxWidth().height(WHEEL_ROW * WHEEL_VISIBLE), contentAlignment = Alignment.Center) {
+                // The band marking the chosen row, behind the wheels.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(WHEEL_ROW)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small),
                 )
-                if (!valid) {
-                    Text(
-                        "Hour 1–12, minute 0–59.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Wheel(
+                        count = 12, initial = hour12 - 1, looping = true,
+                        label = { "${it + 1}" }, onSelected = { hour12 = it + 1 },
+                        modifier = Modifier.width(64.dp),
+                    )
+                    Text(":", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 4.dp))
+                    Wheel(
+                        count = 60, initial = minute, looping = true,
+                        label = { String.format("%02d", it) }, onSelected = { minute = it },
+                        modifier = Modifier.width(64.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Wheel(
+                        count = 2, initial = if (isPm) 1 else 0, looping = false,
+                        label = { if (it == 1) "PM" else "AM" }, onSelected = { isPm = it == 1 },
+                        modifier = Modifier.width(64.dp),
                     )
                 }
             }
         },
         confirmButton = {
             // 12 AM -> 0, 12 PM -> 12, 1-11 PM -> 13-23.
-            TextButton(
-                onClick = { onConfirm(((h!! % 12) + if (isPm) 12 else 0) * 60 + m!!) },
-                enabled = valid,
-            ) { Text("OK") }
+            TextButton(onClick = { onConfirm(((hour12 % 12) + if (isPm) 12 else 0) * 60 + minute) }) { Text("OK") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+private val WHEEL_ROW = 44.dp
+private const val WHEEL_VISIBLE = 5
+/** Rows a looping wheel pretends to have, so it never visibly runs out in either direction. */
+private const val LOOP_ROWS = 10_000
+
+/**
+ * A vertical wheel of [count] values. The row nearest the middle is the selection; flings snap to it,
+ * and tapping a row scrolls it to the middle.
+ */
+@Composable
+private fun Wheel(
+    count: Int,
+    initial: Int,
+    looping: Boolean,
+    label: (Int) -> String,
+    onSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val total = if (looping) LOOP_ROWS * count else count
+    // Start a looping wheel in the middle of its fake length, on the right value.
+    val start = if (looping) (LOOP_ROWS / 2) * count + initial else initial
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = start)
+    val scope = rememberCoroutineScope()
+    val rowPx = with(LocalDensity.current) { WHEEL_ROW.toPx() }
+
+    // Index of the row whose centre is closest to the wheel's centre.
+    val centered by remember {
+        derivedStateOf {
+            val info = state.layoutInfo
+            val mid = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+            info.visibleItemsInfo.minByOrNull { kotlin.math.abs(it.offset + it.size / 2f - mid) }?.index ?: start
+        }
+    }
+    LaunchedEffect(state) {
+        snapshotFlow { centered }.collect { onSelected(it % count) }
+    }
+
+    LazyColumn(
+        state = state,
+        flingBehavior = rememberSnapFlingBehavior(state, SnapPosition.Center),
+        contentPadding = PaddingValues(vertical = WHEEL_ROW * (WHEEL_VISIBLE / 2)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.height(WHEEL_ROW * WHEEL_VISIBLE),
+    ) {
+        items(total) { i ->
+            // Fade and shrink rows by their distance from the middle, like a drum.
+            val distance by remember {
+                derivedStateOf {
+                    val info = state.layoutInfo
+                    val mid = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+                    val item = info.visibleItemsInfo.firstOrNull { it.index == i }
+                    if (item == null) 2f else (kotlin.math.abs(item.offset + item.size / 2f - mid) / rowPx).coerceAtMost(2f)
+                }
+            }
+            Box(
+                Modifier
+                    .height(WHEEL_ROW)
+                    .fillMaxWidth()
+                    .clickable(interactionSource = null, indication = null) {
+                        scope.launch { state.animateScrollToItem(i) }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label(i % count),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = if (distance < 0.5f) FontWeight.SemiBold else FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = 1f - distance * 0.38f
+                        val scale = 1f - distance * 0.12f
+                        scaleX = scale
+                        scaleY = scale
+                    },
+                )
+            }
+        }
+    }
 }
 
 /** Integer field that only reports values within [min]..[max]; the text may be briefly invalid while typing. */
@@ -182,33 +262,37 @@ fun StrictnessPicker(selected: Strictness, onSelect: (Strictness) -> Unit) {
     }
 }
 
-/** Strictness picker plus the options that apply to the chosen level. Shared by recurring and planned reminders. */
+/** Strictness picker plus the options that apply to the chosen level, as editor rows. */
 @Composable
 fun StyleEditor(style: AlertStyle, onChange: (AlertStyle) -> Unit) {
-    Text("Strictness", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    FormSection("How hard to remind")
     StrictnessPicker(style.strictness) { onChange(style.copy(strictness = it)) }
+    Spacer(Modifier.height(8.dp))
     when (style.strictness) {
         Strictness.NAGGING -> {
-            NumberField("Alert again every (minutes)", style.nagEveryMin, 1, 120) {
-                onChange(style.copy(nagEveryMin = it))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = style.escalateAfterNags != null,
-                    onCheckedChange = { onChange(style.copy(escalateAfterNags = if (it) 3 else null)) },
-                )
-                Text("Become a Takeover if I keep ignoring it")
-            }
+            StepperRow(
+                "Alert again every", style.nagEveryMin, 1, 120,
+                onValue = { onChange(style.copy(nagEveryMin = it)) }, unit = { "min" },
+            )
+            SwitchRow(
+                "Escalate to Takeover",
+                checked = style.escalateAfterNags != null,
+                onChange = { onChange(style.copy(escalateAfterNags = if (it) 3 else null)) },
+                supporting = "If I keep ignoring it",
+            )
             style.escalateAfterNags?.let { n ->
-                NumberField("...after this many ignored alerts", n, 1, 50) {
-                    onChange(style.copy(escalateAfterNags = it))
-                }
+                StepperRow(
+                    "After ignoring it", n, 1, 50,
+                    onValue = { onChange(style.copy(escalateAfterNags = it)) }, unit = { "×" },
+                )
             }
         }
         Strictness.TAKEOVER -> {
-            NumberField("Done unlocks after (seconds, 0 = at once)", style.doneCountdownSec, 0, 600) {
-                onChange(style.copy(doneCountdownSec = it))
-            }
+            StepperRow(
+                "Done unlocks after", style.doneCountdownSec, 0, 600, step = 5,
+                onValue = { onChange(style.copy(doneCountdownSec = it)) }, unit = { "s" },
+                supporting = "0 = at once",
+            )
         }
         else -> {}
     }

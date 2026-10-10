@@ -17,13 +17,14 @@ import me.habitnudge.nudge.NudgeActionReceiver
 import me.habitnudge.schedule.DoneReceiver
 import me.habitnudge.schedule.Occurrence
 import me.habitnudge.schedule.RescheduleActivity
+import me.habitnudge.data.Prefs
 import me.habitnudge.takeover.TakeoverActivity
 
 object Notifier {
     // A channel's sound and importance can't be changed after creation; bump the id to change them.
     const val CH_GENTLE = "gentle_v1"
     const val CH_STICKY = "sticky_v1"
-    const val CH_NAG = "nag_v1"
+    /** Nagging's channel id lives in Prefs (see [nagChannel]); its sound follows the chosen alarm sound. */
     const val CH_TAKEOVER = "takeover_v1"
     const val CH_NUDGE = "nudge_v1"
 
@@ -37,8 +38,25 @@ object Notifier {
     private const val TAG_ACTIVE = "a"
     private const val TAG_NUDGE = "n"
 
+    fun nagChannel(context: Context): String = Prefs(context).nagChannelId
+
+    /**
+     * Use [uri] (null = phone default) for Takeover's tone and Nagging's sound. Nagging gets a fresh channel,
+     * since a channel's sound can't change; deleting the old one drops its notifications, and the Engine
+     * re-posts open alerts the next time it runs.
+     */
+    fun setAlarmTone(context: Context, uri: android.net.Uri?) {
+        val prefs = Prefs(context)
+        val old = prefs.nagChannelId
+        prefs.alarmToneUri = uri?.toString()
+        prefs.nagChannelId = "nag_" + System.currentTimeMillis().toString(36)
+        context.getSystemService(NotificationManager::class.java).deleteNotificationChannel(old)
+        createChannels(context)
+    }
+
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
+        val prefs = Prefs(context)
         nm.createNotificationChannel(
             NotificationChannel(CH_GENTLE, "Gentle reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Normal notification with sound"
@@ -52,11 +70,11 @@ object Notifier {
             },
         )
         nm.createNotificationChannel(
-            NotificationChannel(CH_NAG, "Nagging reminders", NotificationManager.IMPORTANCE_HIGH).apply {
+            NotificationChannel(prefs.nagChannelId, "Nagging reminders", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Pops up and alerts again until you tap Done; sounds even on vibrate"
                 // Notification sound on the alarm stream, so ringer/vibrate mode doesn't mute it.
                 setSound(
-                    Settings.System.DEFAULT_NOTIFICATION_URI,
+                    prefs.alarmToneUri?.let(android.net.Uri::parse) ?: Settings.System.DEFAULT_NOTIFICATION_URI,
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -175,7 +193,7 @@ object Notifier {
     fun showActive(context: Context, alert: ActiveAlert) {
         val takeover = alert.style.strictness == Strictness.TAKEOVER
         val channel = when (alert.style.strictness) {
-            Strictness.NAGGING -> CH_NAG
+            Strictness.NAGGING -> nagChannel(context)
             Strictness.TAKEOVER -> CH_TAKEOVER
             else -> CH_STICKY
         }

@@ -223,7 +223,7 @@ object Engine {
         val firedMin = parts.getOrNull(3)?.toIntOrNull()
         val nextDay = if (config.timesPerDay > 1 && firedDay != null && firedMin != null) {
             val slots = Occurrences.noteSlots(noteId, firedDay, config)
-            // More random times later today: keep the day. Otherwise roll forward.
+            // More slots later today: keep the day. Otherwise roll forward.
             if (slots.any { it > firedMin }) return
             maxOf(config.nextReminderEpochDay, firedDay) + interval
         } else {

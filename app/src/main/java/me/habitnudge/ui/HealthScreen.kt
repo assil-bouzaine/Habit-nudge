@@ -1,6 +1,15 @@
 package me.habitnudge.ui
 
+import android.app.Activity
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.text.style.TextOverflow
+import me.habitnudge.notify.Notifier
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -142,6 +151,13 @@ fun HealthScreen(modifier: Modifier = Modifier, onClose: () -> Unit = {}) {
         }
 
         item {
+            Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Sound") }
+        }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { AlarmSoundCard(refresh) { refresh++ } }
+        }
+
+        item {
             Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Try it") }
         }
         item {
@@ -231,6 +247,59 @@ fun HealthScreen(modifier: Modifier = Modifier, onClose: () -> Unit = {}) {
                 }
             }
         }
+    }
+}
+
+/** The sound Takeover rings with and Nagging alerts with, chosen with the phone's own sound picker. */
+@Composable
+private fun AlarmSoundCard(refresh: Int, onChanged: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = context.app.prefs
+    val current = remember(refresh) { prefs.alarmToneUri?.let(Uri::parse) }
+    val name = remember(current) {
+        current?.let { runCatching { RingtoneManager.getRingtone(context, it)?.getTitle(context) }.getOrNull() }
+            ?: "Phone's alarm sound"
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        @Suppress("DEPRECATION") // the typed overload is API 33+
+        val picked: Uri? = result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+        // "Default" in the picker means follow the phone's alarm sound, which is what null stores.
+        Notifier.setAlarmTone(context, picked.takeUnless { it == Settings.System.DEFAULT_ALARM_ALERT_URI })
+        onChanged()
+    }
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            StatusIcon(Glyphs.MusicNote, MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Alarm sound", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            FilledTonalButton(onClick = {
+                picker.launch(
+                    Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Alarm sound")
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, Settings.System.DEFAULT_ALARM_ALERT_URI)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, current ?: Settings.System.DEFAULT_ALARM_ALERT_URI),
+                )
+            }) { Text("Change") }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Takeover rings with it, and Nagging alerts use it too (even on vibrate).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

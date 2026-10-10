@@ -34,6 +34,16 @@ class Prefs(context: Context) {
             .getOrDefault(Strictness.GENTLE)
         set(v) = sp.edit(commit = true) { putString("testStrictness", v.name) }
 
+    /** Sound for Takeover and Nagging, as a content URI; null = the phone's default alarm (Takeover) / notification (Nagging) sound. */
+    var alarmToneUri: String?
+        get() = sp.getString("alarmToneUri", null)
+        set(v) = sp.edit(commit = true) { putString("alarmToneUri", v) }
+
+    /** Current id of the Nagging channel. It changes with the sound, because a channel's sound is fixed once created. */
+    var nagChannelId: String
+        get() = sp.getString("nagChannelId", null) ?: "nag_v1"
+        set(v) = sp.edit(commit = true) { putString("nagChannelId", v) }
+
     /** Default recurring reminders were created (once, on first run). */
     var seeded: Boolean
         get() = sp.getBoolean("seeded", false)

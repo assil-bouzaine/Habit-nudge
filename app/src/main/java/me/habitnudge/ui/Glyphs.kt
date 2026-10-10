@@ -50,6 +50,12 @@ object Glyphs {
         )
     }
 
+    val Minus by lazy { glyph("Minus", "M19,13H5v-2h14v2z") }
+
+    val MusicNote by lazy {
+        glyph("MusicNote", "M12,3v10.55c-0.59,-0.34 -1.27,-0.55 -2,-0.55 -2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4V7h4V3h-6z")
+    }
+
     private fun glyph(name: String, path: String): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
             .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))

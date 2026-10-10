@@ -136,12 +136,17 @@ object Occurrences {
     fun noteSlots(noteId: Long, epochDay: Long, config: ReminderConfig): List<Int> {
         val count = config.timesPerDay.coerceAtLeast(1)
         if (count <= 1) return listOf(config.timeOfDay)
-        if (config.windowEndMin <= config.windowStartMin) return emptyList()
-        val rnd = Random(noteId * 1_000_003L + epochDay)
-        val span = config.windowEndMin - config.windowStartMin
-        return (0 until count)
-            .map { config.windowStartMin + rnd.nextInt(span + 1) }
-            .distinct()
-            .sorted()
+        return evenSlots(config.windowStartMin, config.windowEndMin, count)
+    }
+
+    /**
+     * [count] minutes-of-day spread evenly over [start]..[end], both ends included
+     * (10:00–22:00 × 5 → 10:00, 13:00, 16:00, 19:00, 22:00). Same every day, so keys stay stable.
+     */
+    fun evenSlots(start: Int, end: Int, count: Int): List<Int> {
+        if (end <= start || count < 1) return emptyList()
+        if (count == 1) return listOf(start)
+        val span = end - start
+        return (0 until count).map { i -> start + (i * span + (count - 1) / 2) / (count - 1) }.distinct()
     }
 }

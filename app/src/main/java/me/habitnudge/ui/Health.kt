@@ -63,7 +63,7 @@ object Health {
                 NotificationManager.IMPORTANCE_HIGH,
             ),
             channelItem(
-                Notifier.CH_NAG, "Nagging reminders pop up",
+                Notifier.nagChannel(context), "Nagging reminders pop up",
                 "The \"Nagging reminders\" category must be set to pop up (urgent / banners).",
                 NotificationManager.IMPORTANCE_HIGH,
             ),

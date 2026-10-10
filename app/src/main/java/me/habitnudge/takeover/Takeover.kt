@@ -6,11 +6,13 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import me.habitnudge.data.Prefs
 
 object Takeover {
     /** Cellular or VoIP call in progress or ringing: Takeover waits until it ends. */
@@ -53,26 +55,30 @@ object AlarmSound {
         rang += alertId
         stop()
         val ctx = context.applicationContext
-        val uri = RingtoneManager.getActualDefaultRingtoneUri(ctx, RingtoneManager.TYPE_ALARM)
+        val default = RingtoneManager.getActualDefaultRingtoneUri(ctx, RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: Settings.System.DEFAULT_NOTIFICATION_URI
-        player = try {
-            MediaPlayer().apply {
-                setAudioAttributes(alarmAttrs)
-                setDataSource(ctx, uri)
-                isLooping = true
-                prepare()
-                start()
-            }
-        } catch (e: Exception) {
-            null
-        }
+        val chosen = Prefs(ctx).alarmToneUri?.let(Uri::parse)
+        // The chosen sound may have been deleted since; fall back to the phone's alarm rather than ring nothing.
+        player = (if (chosen != null) play(ctx, chosen) else null) ?: play(ctx, default)
         vibrator = ctx.getSystemService(Vibrator::class.java)?.also {
             // Deprecated on Android 13+, but it's the call that routes vibration as an alarm on Android 10.
             @Suppress("DEPRECATION")
             it.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 800), 0), alarmAttrs)
         }
         handler.postDelayed(::stop, MAX_RING_MS)
+    }
+
+    private fun play(ctx: Context, uri: Uri): MediaPlayer? = try {
+        MediaPlayer().apply {
+            setAudioAttributes(alarmAttrs)
+            setDataSource(ctx, uri)
+            isLooping = true
+            prepare()
+            start()
+        }
+    } catch (e: Exception) {
+        null
     }
 
     /** Let this alert ring again next time it's shown (it was deferred, e.g. by a call). */

@@ -21,17 +21,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -152,27 +149,19 @@ fun daysSummary(mask: Int): String = when (mask) {
         .joinToString(", ") { it.getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
 }
 
-/** "Every day" shortcut plus one round toggle per weekday (Monday first). */
+/** One round toggle per weekday (Monday first), plus quick presets underneath. */
 @Composable
 private fun DaysPicker(mask: Int, onChange: (Int) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Days", style = MaterialTheme.typography.titleSmall)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = mask == RecurringRule.EVERY_DAY,
-                onCheckedChange = { if (it) onChange(RecurringRule.EVERY_DAY) },
-            )
-            Text("Every day")
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             for (day in DayOfWeek.entries) {
                 val bit = RecurringRule.dayBit(day)
                 val on = mask and bit != 0
                 Box(
                     Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
-                        .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
                         .clickable { onChange(mask xor bit) },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -182,6 +171,15 @@ private fun DaysPicker(mask: Int, onChange: (Int) -> Unit) {
                         color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((preset, name) in listOf(
+                RecurringRule.EVERY_DAY to "Every day",
+                RecurringRule.WEEKDAYS to "Weekdays",
+                RecurringRule.WEEKENDS to "Weekends",
+            )) {
+                FilterChip(selected = mask == preset, onClick = { onChange(preset) }, label = { Text(name) })
             }
         }
     }
@@ -203,66 +201,48 @@ private fun RuleEditor(
         else -> null
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        title = { Text(if (initial.id == 0L) "New recurring reminder" else "Edit recurring reminder") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = rule.message,
-                    onValueChange = { rule = rule.copy(message = it) },
-                    label = { Text("Message") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                ModeOption("Repeat during the day", selected = repeating) {
-                    if (!repeating) {
-                        rule = rule.copy(intervalMin = 90, endMinute = maxOf(rule.endMinute, (rule.startMinute + 60).coerceAtMost(23 * 60 + 59)))
-                    }
-                }
-                ModeOption("Once a day", selected = !repeating) {
-                    rule = rule.copy(intervalMin = null)
-                }
-                if (repeating) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TimeButton("From", rule.startMinute) { rule = rule.copy(startMinute = it) }
-                        Spacer(Modifier.width(8.dp))
-                        TimeButton("to", rule.endMinute) { rule = rule.copy(endMinute = it) }
-                    }
-                    NumberField("Every (minutes)", rule.intervalMin ?: 90, 5, 720) {
-                        rule = rule.copy(intervalMin = it)
-                    }
-                } else {
-                    TimeButton("At", rule.startMinute) { rule = rule.copy(startMinute = it, endMinute = it) }
-                }
-                DaysPicker(rule.daysMask) { rule = rule.copy(daysMask = it) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = rule.opensPlanner, onCheckedChange = { rule = rule.copy(opensPlanner = it) })
-                    Text("Tapping it opens tomorrow's plan")
-                }
-                StyleEditor(rule.style) { rule = rule.copy(style = it) }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(rule.copy(message = rule.message.trim())) }, enabled = error == null) { Text("Save") }
-        },
-        dismissButton = {
-            Row {
-                onDelete?.let { TextButton(onClick = it) { Text("Delete", color = MaterialTheme.colorScheme.error) } }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
-    )
-}
-
-@Composable
-private fun ModeOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().selectable(selected = selected, onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
+    EditorScreen(
+        title = if (initial.id == 0L) "New recurring" else "Edit recurring",
+        onDismiss = onDismiss,
+        onSave = { onSave(rule.copy(message = rule.message.trim())) },
+        saveEnabled = error == null,
+        onDelete = onDelete,
     ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(label)
+        MessageField(rule.message, { rule = rule.copy(message = it) }, placeholder = "What should repeat?")
+        FormSection("When")
+        SegmentedControl(
+            options = listOf(false, true),
+            selected = repeating,
+            onSelect = { rep ->
+                rule = if (rep) {
+                    if (repeating) rule
+                    else rule.copy(intervalMin = 90, endMinute = maxOf(rule.endMinute, (rule.startMinute + 60).coerceAtMost(23 * 60 + 59)))
+                } else rule.copy(intervalMin = null, endMinute = rule.startMinute)
+            },
+            label = { if (it) "Through the day" else "Once a day" },
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        if (repeating) {
+            TimeRow("From", rule.startMinute) { rule = rule.copy(startMinute = it) }
+            TimeRow("Until", rule.endMinute) { rule = rule.copy(endMinute = it) }
+            StepperRow(
+                "Every", rule.intervalMin ?: 90, 5, 720, step = 15,
+                onValue = { rule = rule.copy(intervalMin = it) }, unit = { "min" },
+            )
+        } else {
+            TimeRow("At", rule.startMinute) { rule = rule.copy(startMinute = it, endMinute = it) }
+        }
+        FormSection("Days")
+        DaysPicker(rule.daysMask) { rule = rule.copy(daysMask = it) }
+        SwitchRow(
+            "Opens tomorrow's plan",
+            checked = rule.opensPlanner,
+            onChange = { rule = rule.copy(opensPlanner = it) },
+            supporting = "When you tap the reminder",
+        )
+        StyleEditor(rule.style) { rule = rule.copy(style = it) }
+        error?.takeIf { rule.message.isNotBlank() }?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp))
+        }
     }
 }

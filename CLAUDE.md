@@ -55,7 +55,7 @@ HabitApp.kt          Application: db, prefs, app-wide coroutine scope, creates n
 MainActivity.kt      Edge-to-edge Compose host; seeds defaults; Engine.onAppStart; opens Reminders from the plan-tomorrow reminder
 data/                Entities, DAOs, AppDatabase (auto-migrations), Prefs, Seed, NoteAuth (notes PIN), DiagLog (reliability log)
 schedule/            Engine, Occurrences, receivers (alarm, boot/time, Done), RescheduleActivity
-notify/Notifier.kt   Channels (gentle_v1, sticky_v1, nag_v1, takeover_v1, nudge_v1) and all notification builders
+notify/Notifier.kt   Channels (gentle_v1, sticky_v1, nag_* (id in Prefs), takeover_v1, nudge_v1) and all notification builders
 takeover/            TakeoverActivity (full-screen card), Takeover helpers, AlarmSound
 nudge/               NudgeService (accessibility), NudgeCard (overlay views), Nudges (messages), Stats + Bedtime
 ui/                  Screens: Reminders (Plan + Recurring behind a segmented control), Nudge, Stats, Notes, Setup (HealthScreen, reached via the gear in every ScreenHeader); Theme, Components, Widgets, RescheduleDialog
@@ -83,11 +83,12 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 |---|---|---|
 | Gentle | Normal notification on `gentle_v1` | none |
 | Sticky | Ongoing heads-up | Done action |
-| Nagging | Re-posted every N min on `nag_v1` (USAGE_ALARM, rings on vibrate) | Done action; becomes a Takeover after N ignored nags |
+| Nagging | Re-posted every N min on the Nagging channel (USAGE_ALARM, rings on vibrate, chosen alarm sound) | Done action; becomes a Takeover after N ignored nags |
 | Takeover | Full-screen-intent notification + direct `startActivity`, alarm tone and vibration for at most 2 min | Done after an optional countdown |
 
 **Takeover details:**
 - **Launching it:** the activity can start from the background because the app holds "display over other apps" (an Android 10 exemption).
+- **Alarm sound:** chosen in Setup → Sound with the phone's ringtone picker, stored as `Prefs.alarmToneUri` (null = phone default). Takeover plays it (falling back to the phone's alarm if it can't), and Nagging's channel uses it. A channel's sound is fixed, so `Notifier.setAlarmTone` deletes the Nagging channel and creates a new one under a fresh id (`Prefs.nagChannelId`, default `nag_v1`; always go through `Notifier.nagChannel`).
 - **Sound:** the tone is started by the Engine, not the activity, because EMUI keeps the card *paused* over the lock screen.
 - **Leaving it:** Back is blocked, and Home or recents relaunches it.
 - **Calls:** during a call (audio mode IN_CALL / IN_COMMUNICATION / RINGTONE) it is deferred and retried every minute.
@@ -121,7 +122,7 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 - **Two kinds:** regular notes (always visible) and secret notes (PIN-protected). Only regular notes get reminders — the editor hides the reminder options for secrets.
 - **PIN:** SHA-256 hash in `Prefs.notesAuthPin`, stored by `NoteAuth`; **no recovery** (losing it hides the secrets forever). An unlock lasts **60 seconds** (`NoteAuth.SESSION_DURATION_MS`), then secrets hide on their own.
 - **Hiding:** the lock glyph in the Notes header switches views — locked shows regular notes only, unlocked shows **secret notes alone** (never mixed). While unlocked, "+" defaults to a secret note. There is deliberately no "Secret Notes" section that reveals private notes exist.
-- **Reminders:** optional per regular note — every N days at a set time, any strictness (default Gentle), with Pause/Resume on the card (`ReminderConfig.isPaused`). Occurrence key `note:<id>:<epochDay>`; `Occurrences.generateNoteReminders` creates the window and `Engine.advanceNoteReminder` fires one and rolls `nextReminderEpochDay` forward. A day stuck in the past rolls itself forward on the next schedule computation, and the editor starts new reminders on the next future slot (a past slot would be dropped as late and never start). Deleting the note removes its reminder.
+- **Reminders:** optional per regular note — every N days, either once at a set time or N times a day **spread evenly** across a From–Until window with both ends included (`Occurrences.evenSlots`; 7:00–22:00 × 5 → 7:00, 10:45, 14:30, 18:15, 22:00; the editor previews the exact times), any strictness (default Gentle), with Pause/Resume on the card (`ReminderConfig.isPaused`). Occurrence key `note:<id>:<epochDay>`; `Occurrences.generateNoteReminders` creates the window and `Engine.advanceNoteReminder` fires one and rolls `nextReminderEpochDay` forward. A day stuck in the past rolls itself forward on the next schedule computation, and the editor starts new reminders on the next future slot (a past slot would be dropped as late and never start). Deleting the note removes its reminder.
 - **List vs editor:** the list clamps content to one line with an ellipsis; the editor shows it in full.
 
 ### Data (Room, `app/schemas/` exported)
@@ -145,9 +146,10 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 
 - **Colours:** brand blue `#1877F2` (`BrandBlue` in `ui/Theme.kt`), with light and dark schemes.
 - **Shared components** (`ui/Components.kt`): `ScreenHeader` (headline title + one-line subtitle; `leading` slot e.g. a back arrow, `trailing` slot e.g. the Notes lock, then the pause bell and the Setup gear with its red dot unless `showGear = false`), `ListRow` for lists, `SectionCard` for settings groups, `SegmentedControl` (the only segmented/radio-style switch: screen switches, AM/PM, note kind, strictness), `StrictnessLabel`/`StrictnessDot`, `SectionLabel`, `EmptyState` (icon + title + body).
+- **Editors:** new/edit reminder, recurring rule and note open a full-screen `EditorScreen` (`ui/Editor.kt`): ✕ / title / Save bar, a big borderless `MessageField`, then `SettingRow`-based rows (`TimeRow`, `StepperRow` with −/+, `SwitchRow`) under `FormSection` labels. No number text fields in editors.
 - **Strictness picking:** always `StrictnessPicker` (`ui/Widgets.kt`), a 4-way `SegmentedControl` with the level's `description()` below it — reminders, notes and the Setup test all use it.
 - **Buttons:** one filled primary action per screen at most (Save, Turn on, Test); previews and secondary actions are outlined or text buttons. Every list tab uses the same extended FAB labelled "New".
-- **Time picking:** one typed 12-hour AM/PM dialog (`DigitalTimeDialog` in `ui/Widgets.kt`), opened via `TimeButton`, used for plan, recurring, reschedule, bedtime and notes — no analog clock anywhere. Times are always shown with `formatMinute` (locale 12-hour), never hand-formatted "09:00".
+- **Time picking:** one 12-hour dialog with three snapping scroll wheels — hour and minute loop, AM/PM doesn't (`DigitalTimeDialog` + `Wheel` in `ui/Widgets.kt`), opened via `TimeRow` in editors or `TimeButton` in settings cards, used for plan, recurring, reschedule, bedtime and notes — no analog clock anywhere. Times are always shown with `formatMinute` (locale 12-hour), never hand-formatted "09:00".
 - **Master pause UI:** a bell icon in every `ScreenHeader` (via `LocalPause`; turns into a red bell-off while paused) plus a slim red "Alerts paused — nothing will ring" banner with Resume above the tab content (`PausedBanner`).
 - **Plan day picking:** a horizontal strip of day chips from today (two weeks, more via the calendar button), not arrows.
 - **Strictness colours:** Gentle green, Sticky blue, Nagging amber, Takeover red.
@@ -198,5 +200,6 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
     - one `SegmentedControl` and one `StrictnessPicker` everywhere; pause toggle is a bell icon
     - day-chip strip on the Plan tab; 12-hour times in Notes; quieter Nudge and Stats screens
     - Takeover split into a red alarm and a yellow sticky note, previewable from Setup
+15. **Editors + sound round:** full-screen editors with steppers; scroll-wheel time picker; custom alarm sound for Takeover and Nagging; note "several times a day" spread evenly instead of at random times.
 
 **Not yet done:** the reboot test (a Sticky surviving a restart) was never run on the phone, and there's been no 24-hour reliability run with the log pulled afterwards.

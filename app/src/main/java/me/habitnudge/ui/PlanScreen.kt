@@ -38,7 +38,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -354,32 +353,27 @@ private fun PlannedEditor(
         else -> null
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        title = { Text(if (initial.id == 0L) "New reminder · ${dayTitle(r.epochDay)}" else "Edit reminder") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = r.message,
-                    onValueChange = { r = r.copy(message = it) },
-                    label = { Text("Message") },
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TimeButton("At", r.minuteOfDay) { r = r.copy(minuteOfDay = it) }
-                StyleEditor(r.style) { r = r.copy(style = it) }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(r.copy(message = r.message.trim())) }, enabled = error == null) { Text("Save") }
-        },
-        dismissButton = {
-            Row {
-                onDelete?.let { TextButton(onClick = it) { Text("Delete", color = MaterialTheme.colorScheme.error) } }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
-    )
+    EditorScreen(
+        title = if (initial.id == 0L) "New reminder" else "Edit reminder",
+        onDismiss = onDismiss,
+        onSave = { onSave(r.copy(message = r.message.trim())) },
+        saveEnabled = error == null,
+        onDelete = onDelete,
+    ) {
+        MessageField(r.message, { r = r.copy(message = it) }, placeholder = "What do you need to do?")
+        FormSection("When")
+        SettingRow("Day") {
+            Text(
+                "${dayTitle(r.epochDay)} · ${LocalDate.ofEpochDay(r.epochDay).format(DateTimeFormatter.ofPattern("d MMM"))}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TimeRow("Time", r.minuteOfDay) { r = r.copy(minuteOfDay = it) }
+        StyleEditor(r.style) { r = r.copy(style = it) }
+        // Only shout once there's a message; an empty new form isn't an error yet.
+        error?.takeIf { r.message.isNotBlank() }?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp))
+        }
+    }
 }

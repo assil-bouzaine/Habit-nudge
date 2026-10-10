@@ -448,195 +448,116 @@ fun NoteEditorDialog(
     var windowStart by remember { mutableStateOf(note?.reminderConfig?.windowStartMin ?: (7 * 60)) }
     var windowEnd by remember { mutableStateOf(note?.reminderConfig?.windowEndMin ?: (22 * 60)) }
     var isPaused by remember { mutableStateOf(note?.reminderConfig?.isPaused ?: false) }
-    var strictness by remember { mutableStateOf(note?.reminderConfig?.style?.strictness ?: Strictness.GENTLE) }
-    // Several random times a day inside a window, or once at a fixed time.
+    var style by remember { mutableStateOf(note?.reminderConfig?.style ?: AlertStyle(strictness = Strictness.GENTLE)) }
+    // Several evenly spaced times a day inside a window, or once at a fixed time.
     val multi = timesPerDay > 1
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            modifier = Modifier.fillMaxWidth().heightIn(max = 720.dp),
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    if (note?.id == 0L) "New note" else "Edit note",
-                    style = MaterialTheme.typography.headlineSmall,
-                )
+    val windowOk = !multi || windowEnd > windowStart
+    fun save() {
+        val cfg = if (hasReminder && !secretToggle && (!multi || windowEnd > windowStart)) {
+            val interval = intervalDays.coerceAtLeast(1)
+            val today = LocalDate.now().toEpochDay()
+            var startDay = note?.reminderConfig?.nextReminderEpochDay ?: today
+            // First slot must be in the future: a past slot would be dropped
+            // as late and the reminder would never start.
+            val nowMin = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+            val tmp = ReminderConfig(
+                intervalDays = interval,
+                timeOfDay = timeOfDay,
+                isPaused = isPaused,
+                nextReminderEpochDay = startDay,
+                style = style,
+                timesPerDay = timesPerDay,
+                windowStartMin = windowStart,
+                windowEndMin = windowEnd,
+            )
+            while (startDay <= today) {
+                if (startDay < today) {
+                    startDay += interval
+                    continue
+                }
+                val ahead = if (!multi) timeOfDay > nowMin
+                else me.habitnudge.schedule.Occurrences
+                    .noteSlots(note?.id ?: 0L, today, tmp).any { it > nowMin }
+                if (ahead) break else startDay += interval
+            }
+            tmp.copy(nextReminderEpochDay = startDay)
+        } else null
+        onSave(
+            Note(
+                id = note?.id ?: 0,
+                content = content,
+                isSecret = secretToggle,
+                createdAt = note?.createdAt ?: System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                reminderConfig = cfg,
+            ),
+        )
+    }
 
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("Note") },
-                    placeholder = { Text("Start typing…") },
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 120.dp),
-                    maxLines = 10,
+    EditorScreen(
+        title = if (note?.id == 0L) "New note" else "Edit note",
+        onDismiss = onDismiss,
+        onSave = ::save,
+        saveEnabled = content.isNotBlank() && (!hasReminder || secretToggle || windowOk),
+        onDelete = onDelete?.let { del -> { onDismiss(); del() } },
+    ) {
+        MessageField(content, { content = it }, placeholder = "Write something worth remembering", minLines = 4)
+        Spacer(Modifier.height(16.dp))
+        SegmentedControl(
+            options = listOf(false, true),
+            selected = secretToggle,
+            onSelect = { secret ->
+                secretToggle = secret
+                if (secret) onNeedPin()
+            },
+            label = { if (it) "Secret" else "Regular" },
+        )
+        if (secretToggle) {
+            Text(
+                "Hidden behind your PIN. Secret notes can't have reminders.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+            )
+        } else {
+            FormSection("Reminder")
+            SwitchRow("Remind me about this", checked = hasReminder, onChange = { hasReminder = it })
+            if (hasReminder) {
+                StepperRow(
+                    "Every", intervalDays, 1, 365,
+                    onValue = { intervalDays = it }, unit = { if (it == 1) "day" else "days" },
                 )
-
                 SegmentedControl(
                     options = listOf(false, true),
-                    selected = secretToggle,
-                    onSelect = { secret ->
-                        secretToggle = secret
-                        if (secret) onNeedPin()
-                    },
-                    label = { if (it) "Secret" else "Regular" },
+                    selected = multi,
+                    onSelect = { several -> if (!several) timesPerDay = 1 else if (!multi) timesPerDay = 5 },
+                    label = { if (it) "Several times" else "Once a day" },
+                    modifier = Modifier.padding(vertical = 12.dp),
                 )
-
-                if (secretToggle) {
+                if (!multi) {
+                    TimeRow("At", timeOfDay) { timeOfDay = it }
+                } else {
+                    TimeRow("From", windowStart) { windowStart = it }
+                    TimeRow("Until", windowEnd) { windowEnd = it }
+                    StepperRow(
+                        "Times a day", timesPerDay, 2, 24,
+                        onValue = { timesPerDay = it }, unit = { "×" },
+                    )
+                    // Show exactly when it will ring: the slots are evenly spaced, both ends included.
+                    val slots = if (windowOk) me.habitnudge.schedule.Occurrences.evenSlots(windowStart, windowEnd, timesPerDay)
+                    else emptyList()
                     Text(
-                        "Hidden behind your PIN; can't have reminders.",
+                        if (!windowOk) "\"Until\" must be after \"From\"."
+                        else "Spread evenly: " + slots.joinToString(" · ") { formatMinute(it) },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (windowOk) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
                     )
                 }
-
-                if (!secretToggle) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Reminder", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                        Switch(checked = hasReminder, onCheckedChange = { hasReminder = it })
-                    }
-
-                    if (hasReminder) {
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text("Every", style = MaterialTheme.typography.bodyMedium)
-                                OutlinedTextField(
-                                    value = intervalDays.toString(),
-                                    onValueChange = { intervalDays = it.toIntOrNull()?.coerceIn(1, 365) ?: 1 },
-                                    modifier = Modifier.width(72.dp),
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                )
-                                Text(
-                                    if (intervalDays == 1) "day" else "days",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-
-                            SegmentedControl(
-                                options = listOf(false, true),
-                                selected = multi,
-                                onSelect = { several ->
-                                    if (!several) timesPerDay = 1 else if (!multi) timesPerDay = 5
-                                },
-                                label = { if (it) "Several times" else "Once a day" },
-                            )
-
-                            if (!multi) {
-                                TimeButton("At", timeOfDay) { timeOfDay = it }
-                            } else {
-                                Text(
-                                    "Picks random times inside the window, a different set each day.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TimeButton("From", windowStart) { windowStart = it }
-                                    Spacer(Modifier.width(8.dp))
-                                    TimeButton("to", windowEnd) { windowEnd = it }
-                                }
-                                NumberField("Times per day", timesPerDay, 1, 24) {
-                                    timesPerDay = it
-                                }
-                                if (windowEnd <= windowStart) {
-                                    Text(
-                                        "The end must be after the start.",
-                                        color = MaterialTheme.colorScheme.error,
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                }
-                            }
-
-                            Text("Strictness", style = MaterialTheme.typography.titleSmall)
-                            StrictnessPicker(strictness) { strictness = it }
-
-                            if (note?.reminderConfig != null) {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text("Pause reminders", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                                    Switch(checked = isPaused, onCheckedChange = { isPaused = it })
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (onDelete != null) {
-                        TextButton(onClick = { onDismiss(); onDelete() }) {
-                            Text("Delete", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                    Button(
-                        onClick = {
-                            val cfg = if (hasReminder && !secretToggle && (!multi || windowEnd > windowStart)) {
-                                val interval = intervalDays.coerceAtLeast(1)
-                                val today = LocalDate.now().toEpochDay()
-                                var startDay = note?.reminderConfig?.nextReminderEpochDay ?: today
-                                // First slot must be in the future: a past slot would be dropped
-                                // as late and the reminder would never start.
-                                val nowMin = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
-                                val tmp = ReminderConfig(
-                                    intervalDays = interval,
-                                    timeOfDay = timeOfDay,
-                                    isPaused = isPaused,
-                                    nextReminderEpochDay = startDay,
-                                    style = AlertStyle(strictness = strictness),
-                                    timesPerDay = timesPerDay,
-                                    windowStartMin = windowStart,
-                                    windowEndMin = windowEnd,
-                                )
-                                while (startDay <= today) {
-                                    if (startDay < today) {
-                                        startDay += interval
-                                        continue
-                                    }
-                                    val ahead = if (!multi) timeOfDay > nowMin
-                                    else me.habitnudge.schedule.Occurrences
-                                        .noteSlots(note?.id ?: 0L, today, tmp).any { it > nowMin }
-                                    if (ahead) break else startDay += interval
-                                }
-                                tmp.copy(nextReminderEpochDay = startDay)
-                            } else null
-                            onSave(
-                                Note(
-                                    id = note?.id ?: 0,
-                                    content = content,
-                                    isSecret = secretToggle,
-                                    createdAt = note?.createdAt ?: System.currentTimeMillis(),
-                                    updatedAt = System.currentTimeMillis(),
-                                    reminderConfig = cfg,
-                                ),
-                            )
-                        },
-                        enabled = content.isNotBlank() && (!hasReminder || secretToggle || !multi || windowEnd > windowStart),
-                        modifier = Modifier.defaultMinSize(minWidth = 88.dp),
-                    ) { Text("Save") }
+                StyleEditor(style) { style = it }
+                if (note?.reminderConfig != null) {
+                    SwitchRow("Pause reminders", checked = isPaused, onChange = { isPaused = it })
                 }
             }
         }
