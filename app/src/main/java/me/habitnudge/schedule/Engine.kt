@@ -29,7 +29,8 @@ import me.habitnudge.takeover.Takeover
 object Engine {
     /** Reminders more than this late (phone off, app killed) are dropped instead of fired. */
     const val LATE_GRACE_MS = 30 * 60_000L
-    private const val LOOKAHEAD_MS = 8 * 24 * 60 * 60_000L
+    private const val DAY_MS = 24 * 60 * 60_000L
+    private const val LOOKAHEAD_MS = 8 * DAY_MS
     private const val TAKEOVER_RETRY_MS = 60_000L
     /** Past days' planned reminders older than this are deleted. */
     private const val KEEP_PLANNED_DAYS = 30L
@@ -295,6 +296,20 @@ object Engine {
         }
     }
 
+    /**
+     * The next occurrence within [LOOKAHEAD_MS], searched a day at a time so the usual case (something
+     * later today or tomorrow) doesn't build a week of repeating slots just to take the first one.
+     */
+    private suspend fun firstOccurrenceAfter(app: me.habitnudge.HabitApp, now: Long): Occurrence? {
+        var from = now
+        while (from < now + LOOKAHEAD_MS) {
+            val to = minOf(from + DAY_MS, now + LOOKAHEAD_MS)
+            Occurrences.between(app.db, app.prefs, from, to).firstOrNull()?.let { return it }
+            from = to
+        }
+        return null
+    }
+
     private fun nagMillis(minutes: Int) = minutes.coerceAtLeast(1) * 60_000L
 
     private suspend fun scheduleNext(context: Context) {
@@ -303,7 +318,7 @@ object Engine {
         val now = System.currentTimeMillis()
         // Anything scheduled from here on must fire, even if this is the very first alarm.
         if (prefs.lastProcessedAt == 0L) prefs.lastProcessedAt = now
-        val next = Occurrences.between(app.db, prefs, now, now + LOOKAHEAD_MS).firstOrNull()
+        val next = firstOccurrenceAfter(app, now)
         val nag = app.db.alerts().nextNag()
 
         val am = context.getSystemService(AlarmManager::class.java)

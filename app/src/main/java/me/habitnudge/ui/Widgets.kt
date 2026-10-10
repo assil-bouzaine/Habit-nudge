@@ -24,6 +24,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.core.graphics.drawable.toBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -295,5 +305,38 @@ fun StyleEditor(style: AlertStyle, onChange: (AlertStyle) -> Unit) {
             )
         }
         else -> {}
+    }
+}
+
+/**
+ * Launcher icons decoded off the main thread and kept for the process's life (a handful of watched apps,
+ * ~36 KB each), so switching tabs doesn't decode them again.
+ */
+private val appIconCache = java.util.concurrent.ConcurrentHashMap<String, ImageBitmap>()
+
+/** The app's launcher icon, or null while it loads (or if the app is gone). */
+@Composable
+fun rememberAppIcon(pkg: String): ImageBitmap? {
+    val context = LocalContext.current
+    val icon by produceState(appIconCache[pkg], pkg) {
+        if (value == null) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { context.packageManager.getApplicationIcon(pkg).toBitmap(96, 96).asImageBitmap() }
+                    .getOrNull()
+                    ?.also { appIconCache[pkg] = it }
+            }
+        }
+    }
+    return icon
+}
+
+/** An app's icon at [size], with a quiet rounded placeholder until it's ready. */
+@Composable
+fun AppIconImage(pkg: String, size: Dp) {
+    val icon = rememberAppIcon(pkg)
+    if (icon != null) {
+        Image(icon, contentDescription = null, modifier = Modifier.size(size))
+    } else {
+        Box(Modifier.size(size).background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium))
     }
 }

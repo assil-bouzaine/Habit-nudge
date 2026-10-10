@@ -4,17 +4,13 @@ import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -144,7 +140,7 @@ fun NudgeScreen(modifier: Modifier = Modifier) {
                 modifier = Modifier.alpha(if (a.enabled) 1f else 0.6f),
                 onClick = { editing = a },
             ) {
-                AppIcon(a.packageName)
+                AppIconImage(a.packageName, 44.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(a.label, style = MaterialTheme.typography.titleMedium)
@@ -335,20 +331,6 @@ private fun BedtimeSettings(previewApp: NudgeApp?) {
                 }, modifier = Modifier.fillMaxWidth().height(44.dp)) { Text("Preview bedtime card") }
             }
         }
-    }
-}
-
-/** The installed app's real launcher icon. */
-@Composable
-private fun AppIcon(pkg: String) {
-    val context = LocalContext.current
-    val icon = remember(pkg) {
-        runCatching { context.packageManager.getApplicationIcon(pkg).toBitmap(96, 96).asImageBitmap() }.getOrNull()
-    }
-    if (icon != null) {
-        Image(icon, contentDescription = null, modifier = Modifier.size(44.dp))
-    } else {
-        IconBadge(Icons.Filled.Face, MaterialTheme.colorScheme.primary, 44.dp)
     }
 }
 

@@ -21,8 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import java.time.format.TextStyle
 import java.util.Locale
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Add

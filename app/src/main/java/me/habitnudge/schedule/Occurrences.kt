@@ -3,7 +3,6 @@ package me.habitnudge.schedule
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlin.random.Random
 import me.habitnudge.data.AlertStyle
 import me.habitnudge.data.AppDatabase
 import me.habitnudge.data.Prefs

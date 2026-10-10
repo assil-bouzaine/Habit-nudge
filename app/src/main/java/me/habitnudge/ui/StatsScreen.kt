@@ -2,7 +2,6 @@ package me.habitnudge.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,13 +48,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -92,7 +89,10 @@ fun StatsScreen(modifier: Modifier = Modifier) {
         NudgeService.instance?.flushForeground()
         onPauseOrDispose {}
     }
-    LaunchedEffect(week, limit) { summary = Stats.summary(app) }
+    // Rows change on every few seconds of foreground time; the summary only needs a redo when a day's
+    // whole-minute total, the watched set or the limit changes.
+    val minuteTotals = remember(week) { week.groupBy { it.day }.mapValues { (_, r) -> minutes(r.sumOf { it.foregroundMs }) } }
+    LaunchedEffect(minuteTotals, watched, limit) { summary = Stats.summary(app) }
 
     val byDay = week.groupBy { it.day }
     val todayRows = byDay[today].orEmpty().sortedByDescending { it.foregroundMs }
@@ -202,7 +202,7 @@ fun StatsScreen(modifier: Modifier = Modifier) {
                         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                             LegendItem("✓", SuccessGreen, "Under limit")
                             LegendItem("✕", MaterialTheme.colorScheme.error, "Over limit")
-                            LegendItem("", MaterialTheme.colorScheme.outline, "Not tracked")
+                            LegendItem("", MaterialTheme.colorScheme.outline, "Not tracked", boxed = false)
                         }
                     }
                 }
@@ -395,13 +395,19 @@ private fun CalendarCell(r: Stats.DayResult, selected: Boolean, onClick: () -> U
 }
 
 @Composable
-private fun LegendItem(glyph: String, color: Color, label: String) {
+private fun LegendItem(glyph: String, color: Color, label: String, boxed: Boolean = true) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        // Untracked calendar days are just a faint date with no box, so their key is drawn the same way.
         Box(
-            Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(color.copy(alpha = 0.16f))
-                .border(BorderStroke(1.dp, color.copy(alpha = 0.5f)), RoundedCornerShape(4.dp)),
+            if (boxed) {
+                Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(color.copy(alpha = 0.16f))
+                    .border(BorderStroke(1.dp, color.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
+            } else Modifier.size(16.dp),
             contentAlignment = Alignment.Center,
-        ) { if (glyph.isNotEmpty()) Text(glyph, color = color, fontSize = 10.sp, lineHeight = 10.sp) }
+        ) {
+            if (glyph.isNotEmpty()) Text(glyph, color = color, fontSize = 10.sp, lineHeight = 10.sp)
+            else if (!boxed) Text("7", color = color.copy(alpha = 0.7f), fontSize = 11.sp, lineHeight = 11.sp)
+        }
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -497,11 +503,8 @@ private fun AppStatRow(row: AppDayStat, knownLabel: String?) {
     val label = knownLabel ?: remember(row.packageName) {
         runCatching { pm.getApplicationLabel(pm.getApplicationInfo(row.packageName, 0)).toString() }.getOrDefault(row.packageName)
     }
-    val icon = remember(row.packageName) {
-        runCatching { pm.getApplicationIcon(row.packageName).toBitmap(96, 96).asImageBitmap() }.getOrNull()
-    }
     ListRow {
-        if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
+        AppIconImage(row.packageName, 40.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.titleMedium)

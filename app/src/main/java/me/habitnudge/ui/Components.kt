@@ -260,17 +260,6 @@ fun StatusIcon(icon: ImageVector, tint: Color, size: Dp = 24.dp, description: St
     Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(size))
 }
 
-/** Fallback glyph when a real icon (e.g. an app launcher icon) is unavailable. */
-@Composable
-fun IconBadge(icon: ImageVector, tint: Color, size: Dp = 40.dp) {
-    Box(
-        Modifier.size(size).background(tint.copy(alpha = 0.12f), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f))
-    }
-}
-
 @Composable
 fun SectionLabel(text: String) {
     Text(

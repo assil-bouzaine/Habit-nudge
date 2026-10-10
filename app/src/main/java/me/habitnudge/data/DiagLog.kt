@@ -13,6 +13,8 @@ import java.time.format.DateTimeFormatter
  */
 object DiagLog {
     private const val MAX_LINES = 400
+    /** About twice MAX_LINES of typical ~60-byte lines, so trimming happens roughly every 400 appends. */
+    private const val TRIM_AT_BYTES = 48_000L
     /** Firing later than this is marked LATE. */
     private const val LATE_MS = 60_000L
 
@@ -24,12 +26,15 @@ object DiagLog {
     private fun fmt(f: DateTimeFormatter, millis: Long) =
         f.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
 
+    /** Appends one line; only when the file has grown well past [MAX_LINES] is it rewritten to the newest ones. */
     @Synchronized
     fun add(context: Context, line: String) {
         runCatching {
             val f = file(context)
-            val lines = if (f.exists()) f.readLines() else emptyList()
-            f.writeText((lines + "${fmt(stamp, System.currentTimeMillis())} $line").takeLast(MAX_LINES).joinToString("\n", postfix = "\n"))
+            f.appendText("${fmt(stamp, System.currentTimeMillis())} $line\n")
+            if (f.length() > TRIM_AT_BYTES) {
+                f.writeText(f.readLines().takeLast(MAX_LINES).joinToString("\n", postfix = "\n"))
+            }
         }
     }
 
