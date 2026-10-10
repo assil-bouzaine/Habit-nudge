@@ -15,8 +15,21 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -63,6 +76,10 @@ import me.habitnudge.data.Strictness
 import me.habitnudge.schedule.Engine
 import java.time.LocalDate
 
+private const val PRIVATE_OPEN_MS = 60_000L
+
+private enum class NoteFilter(val label: String) { ALL("All"), REMINDERS("Reminders"), PRIVATE("Private") }
+
 @Composable
 fun NotesScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -72,43 +89,40 @@ fun NotesScreen(modifier: Modifier = Modifier) {
     val regularNotes by app.db.note().observeRegularNotes().collectAsState(initial = emptyList())
     val secretNotes by app.db.note().observeSecretNotes().collectAsState(initial = emptyList())
 
-    var isSecretUnlocked by remember { mutableStateOf(NoteAuth.isAuthenticated(app.prefs)) }
+    var filter by remember { mutableStateOf(NoteFilter.ALL) }
+    // Private notes are invisible until a *new* note whose whole text is the PIN is saved: that opens the
+    // Private filter instead of saving anything. It closes on going back to All/Reminders, after a minute,
+    // or when the app goes to the background.
+    var unlocked by remember { mutableStateOf(false) }
     var showPinSetupDialog by remember { mutableStateOf(false) }
-    var showPinEntryDialog by remember { mutableStateOf(false) }
-    var showNoteEditor by remember { mutableStateOf(false) }
     var editingNote by remember { mutableStateOf<Note?>(null) }
     var noteToDelete by remember { mutableStateOf<Note?>(null) }
 
-    // The secret session is short (60s): once it lapses, re-lock even if the screen is still up.
-    LaunchedEffect(isSecretUnlocked) {
-        if (isSecretUnlocked) {
-            val left = app.prefs.notesAuthenticatedUntil - System.currentTimeMillis()
-            if (left > 0) {
-                delay(left)
-                isSecretUnlocked = NoteAuth.isAuthenticated(app.prefs)
-            }
+    fun lock() {
+        unlocked = false
+        NoteAuth.clearSession(app.prefs)
+        if (filter == NoteFilter.PRIVATE) filter = NoteFilter.ALL
+    }
+    fun unlock() {
+        unlocked = true
+        filter = NoteFilter.PRIVATE
+    }
+    LifecycleResumeEffect(Unit) { onPauseOrDispose { lock() } }
+    LaunchedEffect(unlocked) {
+        if (unlocked) {
+            delay(PRIVATE_OPEN_MS)
+            lock()
         }
     }
 
-    fun onLockClick() {
-        if (!NoteAuth.isPinConfigured(app.prefs)) {
-            showPinSetupDialog = true
-        } else if (isSecretUnlocked) {
-            NoteAuth.clearSession(app.prefs)
-            isSecretUnlocked = false
-        } else {
-            showPinEntryDialog = true
-        }
+    fun select(f: NoteFilter) {
+        if (f != NoteFilter.PRIVATE) lock()
+        filter = f
     }
 
     fun openNewNote() {
-        // In the private view a new note defaults to secret so it shows where you are.
-        editingNote = Note(
-            id = 0, content = "", isSecret = isSecretUnlocked,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis(),
-        )
-        showNoteEditor = true
+        val now = System.currentTimeMillis()
+        editingNote = Note(id = 0, content = "", isSecret = filter == NoteFilter.PRIVATE, createdAt = now, updatedAt = now)
     }
 
     fun togglePause(note: Note) {
@@ -119,64 +133,61 @@ fun NotesScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // Locked = regular notes only; unlocked = secret notes alone (never mixed).
-    val visibleNotes = if (isSecretUnlocked) secretNotes else regularNotes
+    val visible = when (filter) {
+        NoteFilter.ALL -> regularNotes
+        NoteFilter.REMINDERS -> regularNotes.filter { it.reminderConfig != null }
+        NoteFilter.PRIVATE -> if (unlocked) secretNotes else emptyList()
+    }
+    val withReminders = regularNotes.count { it.reminderConfig?.isPaused == false }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+    Box(modifier.fillMaxSize()) {
+        LazyVerticalStaggeredGrid(
+            columns = StaggeredGridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalItemSpacing = 10.dp,
         ) {
-            // Header: title + a discreet lock, then the Setup gear (from ScreenHeader).
-            item {
-                Column(Modifier.padding(horizontal = 16.dp)) {
-                    ScreenHeader("Notes", if (isSecretUnlocked) "Private" else null) {
-                        IconButton(onClick = ::onLockClick) {
-                            Icon(
-                                Icons.Default.Lock,
-                                contentDescription = "Private notes",
-                                modifier = Modifier.size(20.dp),
-                                tint = if (isSecretUnlocked) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.outline,
-                            )
-                        }
-                    }
-                }
+            item(span = StaggeredGridItemSpan.FullLine) {
+                ScreenHeader(
+                    "Notes",
+                    when {
+                        regularNotes.isEmpty() -> null
+                        withReminders == 0 -> "${regularNotes.size} notes"
+                        else -> "${regularNotes.size} notes · $withReminders with reminders"
+                    },
+                    trailing = {
+                        if (unlocked) TextButton(onClick = ::lock) { Text("Lock") }
+                    },
+                )
+            }
+            item(span = StaggeredGridItemSpan.FullLine) {
+                FilterPills(filter, showPrivate = unlocked, onSelect = ::select)
             }
 
-            if (visibleNotes.isEmpty()) {
-                item {
-                    Column(Modifier.padding(horizontal = 16.dp)) {
-                        if (isSecretUnlocked) {
-                            EmptyState(
-                                icon = Icons.Default.Lock,
-                                title = "No private notes yet",
-                                body = "Tap New to write one. It stays behind your PIN.",
-                            )
-                        } else {
-                            EmptyState(
-                                icon = Glyphs.Notes,
-                                title = "No notes yet",
-                                body = "Tap New to write one. Add a reminder to see it again later.",
-                            )
-                        }
+            if (visible.isEmpty()) {
+                item(span = StaggeredGridItemSpan.FullLine) {
+                    when (filter) {
+                        NoteFilter.ALL -> EmptyState(Glyphs.Notes, "No notes yet", "Tap New to write one.")
+                        NoteFilter.REMINDERS -> EmptyState(
+                            Icons.Default.Notifications, "No reminders on notes",
+                            "Open a note and turn on \"Remind me about this\".",
+                        )
+                        NoteFilter.PRIVATE -> EmptyState(Icons.Default.Lock, "No private notes", "Tap New to write one.")
                     }
                 }
             } else {
-                items(visibleNotes, key = { it.id }) { note ->
-                    NoteCard(
+                items(visible, key = { it.id }) { note ->
+                    NoteTile(
                         note = note,
-                        onClick = { editingNote = note; showNoteEditor = true },
+                        onClick = { editingNote = note },
                         onDelete = { noteToDelete = note },
                         onTogglePause = { togglePause(note) },
                     )
                 }
             }
-
-            item { Spacer(Modifier.height(88.dp)) }
         }
 
-        // New note FAB: tap it, write, then choose regular/secret and reminders inside the editor.
         ExtendedFloatingActionButton(
             onClick = ::openNewNote,
             icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -193,134 +204,176 @@ fun NotesScreen(modifier: Modifier = Modifier) {
                 NoteAuth.setPin(pin, app.prefs)
                 NoteAuth.authenticate(pin, app.prefs)
                 showPinSetupDialog = false
-                isSecretUnlocked = true
             },
             onDismiss = { showPinSetupDialog = false },
         )
     }
 
-    if (showPinEntryDialog) {
-        PinEntryDialog(
-            onAuthenticate = { pin ->
-                if (NoteAuth.authenticate(pin, app.prefs)) {
-                    isSecretUnlocked = true
-                    showPinEntryDialog = false
-                    true
-                } else {
-                    false
-                }
-            },
-            onDismiss = { showPinEntryDialog = false },
-        )
-    }
-
-    if (showNoteEditor && editingNote != null) {
+    editingNote?.let { editing ->
         NoteEditorDialog(
-            note = editingNote,
+            note = editing,
+            // The Regular/Private switch only exists while Private is open, or before there's any PIN to set.
+            allowPrivate = unlocked || !NoteAuth.isPinConfigured(app.prefs),
             onNeedPin = {
                 if (!NoteAuth.isPinConfigured(app.prefs)) showPinSetupDialog = true
             },
             onSave = { note ->
+                // The secret knock: a brand-new regular note that is exactly the PIN opens Private and isn't saved.
+                if (note.id == 0L && !note.isSecret && NoteAuth.isPinConfigured(app.prefs) &&
+                    NoteAuth.authenticate(note.content.trim(), app.prefs)
+                ) {
+                    editingNote = null
+                    unlock()
+                    return@NoteEditorDialog
+                }
                 scope.launch {
-                    var willReschedule = note.reminderConfig != null
-                    if (note.id == 0L) {
-                        app.db.note().insert(note)
-                    } else {
-                        willReschedule = willReschedule || editingNote?.reminderConfig != null
-                        app.db.note().update(note)
-                    }
-                    if (willReschedule) Engine.reschedule(context)
-                    showNoteEditor = false
+                    val reschedule = note.reminderConfig != null || editing.reminderConfig != null
+                    if (note.id == 0L) app.db.note().insert(note) else app.db.note().update(note)
+                    if (reschedule) Engine.reschedule(context)
                     editingNote = null
                 }
             },
-            onDelete = if (editingNote?.id != 0L) ({ noteToDelete = editingNote }) else null,
-            onDismiss = {
-                showNoteEditor = false
-                editingNote = null
-            },
+            onDelete = if (editing.id != 0L) ({ noteToDelete = editing }) else null,
+            onDismiss = { editingNote = null },
         )
     }
 
-    if (noteToDelete != null) {
+    noteToDelete?.let { doomed ->
         AlertDialog(
             onDismissRequest = { noteToDelete = null },
-            title = { Text("Delete note?") },
-            text = { Text("This can't be undone.") },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+            title = { Text("Delete this note?") },
+            text = { Text("It can't be brought back.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val hadReminder = noteToDelete?.reminderConfig != null
-                            app.db.note().delete(noteToDelete!!)
-                            if (hadReminder) Engine.reschedule(context)
-                            noteToDelete = null
-                            showNoteEditor = false
-                            editingNote = null
-                        }
-                    },
-                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = {
+                    scope.launch {
+                        app.db.note().delete(doomed)
+                        if (doomed.reminderConfig != null) Engine.reschedule(context)
+                        noteToDelete = null
+                        editingNote = null
+                    }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = {
-                TextButton(onClick = { noteToDelete = null }) { Text("Cancel") }
-            },
+            dismissButton = { TextButton(onClick = { noteToDelete = null }) { Text("Cancel") } },
         )
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/** All / Reminders / Private as pills; the chosen one is filled with the text colour, like a tab. */
 @Composable
-fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePause: () -> Unit) {
-    val config = note.reminderConfig
-    ListRow(onClick = onClick, onLongClick = onDelete) {
-        Column(Modifier.weight(1f)) {
-            // One line only: the list is a list, the editor shows the full text.
-            Text(
-                note.content,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                buildString {
-                    append(formatRelativeTime(note.updatedAt))
-                    when {
-                        config == null -> {}
-                        config.isPaused -> append(" · Reminder paused")
-                        else -> {
-                            append(" · ")
-                            append(if (config.intervalDays == 1) "Daily" else "Every ${config.intervalDays} days")
-                            if (config.timesPerDay > 1) {
-                                append(", ${config.timesPerDay}× ${formatMinute(config.windowStartMin)}–${formatMinute(config.windowEndMin)}")
-                            } else {
-                                append(" at ${formatMinute(config.timeOfDay)}")
-                            }
-                        }
-                    }
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (config != null) {
-            TextButton(
-                onClick = onTogglePause,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+private fun FilterPills(selected: NoteFilter, showPrivate: Boolean, onSelect: (NoteFilter) -> Unit) {
+    Row(
+        Modifier.padding(bottom = 6.dp).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (f in NoteFilter.entries) {
+            if (f == NoteFilter.PRIVATE && !showPrivate) continue
+            val on = f == selected
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .selectable(selected = on, role = Role.Tab, onClick = { onSelect(f) })
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(if (config.isPaused) "Resume" else "Pause", style = MaterialTheme.typography.labelMedium)
+                val fg = if (on) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurfaceVariant
+                if (f == NoteFilter.PRIVATE) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(f.label, style = MaterialTheme.typography.labelLarge, color = fg)
             }
         }
-        IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
-            Icon(
-                Icons.Default.Delete,
-                contentDescription = "Delete note",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
+    }
+}
+
+/**
+ * A note as a card: first line as its title, a few lines of the rest, then a quiet footer with the
+ * reminder (if any) and when it last changed. Long-press for pause/resume and delete.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun NoteTile(note: Note, onClick: () -> Unit, onDelete: () -> Unit, onTogglePause: () -> Unit) {
+    val config = note.reminderConfig
+    val lines = note.content.trim().lines()
+    val title = lines.firstOrNull().orEmpty()
+    val body = lines.drop(1).joinToString("\n").trim()
+    var menu by remember { mutableStateOf(false) }
+
+    Box {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .combinedClickable(onClick = onClick, onLongClick = { menu = true })
+                .padding(14.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (body.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 7,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            if (config != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (config.isPaused) Glyphs.BellOff else Icons.Default.Notifications,
+                        contentDescription = null,
+                        tint = if (config.isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        if (config.isPaused) "Paused" else reminderSummary(config),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (config.isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+            Text(
+                formatRelativeTime(note.updatedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
             )
         }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            if (config != null) {
+                DropdownMenuItem(
+                    text = { Text(if (config.isPaused) "Resume reminder" else "Pause reminder") },
+                    onClick = { menu = false; onTogglePause() },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                onClick = { menu = false; onDelete() },
+            )
+        }
+    }
+}
+
+/** "Daily · 9:00 AM", "Every 3 days · 9:00 AM", "5× daily · 7:00 AM–10:00 PM". */
+private fun reminderSummary(config: ReminderConfig): String {
+    val every = if (config.intervalDays == 1) "daily" else "every ${config.intervalDays} days"
+    return if (config.timesPerDay > 1) {
+        "${config.timesPerDay}× $every · ${formatMinute(config.windowStartMin)}–${formatMinute(config.windowEndMin)}"
+    } else {
+        "${every.replaceFirstChar { it.uppercase() }} · ${formatMinute(config.timeOfDay)}"
     }
 }
 
@@ -331,10 +384,12 @@ fun formatRelativeTime(timestamp: Long): String {
     val days = hours / 24
     return when {
         minutes < 1 -> "Just now"
-        minutes < 60 -> "${minutes}m ago"
-        hours < 24 -> "${hours}h ago"
-        days < 7 -> "${days}d ago"
-        else -> "${days / 7}w ago"
+        minutes < 60 -> "${minutes} min ago"
+        hours < 24 -> "${hours} h ago"
+        days < 2 -> "Yesterday"
+        days < 7 -> "$days days ago"
+        else -> java.time.Instant.ofEpochMilli(timestamp).atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
     }
 }
 
@@ -393,47 +448,9 @@ fun PinSetupDialog(onPinSet: (String) -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun PinEntryDialog(onAuthenticate: (String) -> Boolean, onDismiss: () -> Unit) {
-    var pin by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Enter PIN") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { pin = it; error = false },
-                    label = { Text("PIN") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = error,
-                )
-                if (error) {
-                    Text(
-                        "Incorrect PIN",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (!onAuthenticate(pin)) { error = true; pin = "" }
-                },
-            ) { Text("Unlock") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-@Composable
 fun NoteEditorDialog(
     note: Note?,
+    allowPrivate: Boolean,
     onNeedPin: () -> Unit,
     onSave: (Note) -> Unit,
     onDelete: (() -> Unit)?,
@@ -503,19 +520,19 @@ fun NoteEditorDialog(
         onDelete = onDelete?.let { del -> { onDismiss(); del() } },
     ) {
         MessageField(content, { content = it }, placeholder = "Write something worth remembering", minLines = 4)
-        Spacer(Modifier.height(16.dp))
-        SegmentedControl(
+        if (allowPrivate || secretToggle) Spacer(Modifier.height(16.dp))
+        if (allowPrivate || secretToggle) SegmentedControl(
             options = listOf(false, true),
             selected = secretToggle,
             onSelect = { secret ->
                 secretToggle = secret
                 if (secret) onNeedPin()
             },
-            label = { if (it) "Secret" else "Regular" },
+            label = { if (it) "Private" else "Regular" },
         )
         if (secretToggle) {
             Text(
-                "Hidden behind your PIN. Secret notes can't have reminders.",
+                "Only opens with your PIN. Private notes can't have reminders.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp, start = 4.dp),

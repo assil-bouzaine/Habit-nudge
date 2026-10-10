@@ -119,11 +119,14 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 
 ### Notes (`ui/NotesScreen.kt`, `data/NoteAuth.kt`)
 
-- **Two kinds:** regular notes (always visible) and secret notes (PIN-protected). Only regular notes get reminders — the editor hides the reminder options for secrets.
-- **PIN:** SHA-256 hash in `Prefs.notesAuthPin`, stored by `NoteAuth`; **no recovery** (losing it hides the secrets forever). An unlock lasts **60 seconds** (`NoteAuth.SESSION_DURATION_MS`), then secrets hide on their own.
-- **Hiding:** the lock glyph in the Notes header switches views — locked shows regular notes only, unlocked shows **secret notes alone** (never mixed). While unlocked, "+" defaults to a secret note. There is deliberately no "Secret Notes" section that reveals private notes exist.
+- **Two kinds:** regular notes and private notes (`isSecret`, PIN-protected; shown as "Private" in the UI). Only regular notes get reminders — the editor hides the reminder options for private ones.
+- **PIN:** SHA-256 hash in `Prefs.notesAuthPin`, stored by `NoteAuth`; **no recovery** (losing it locks the private notes forever).
+- **Layout:** a two-column staggered grid of cards (`NoteTile`): first line bold as the title, a few lines of the rest, then a footer with the reminder (bell + "Daily · 9:00 AM", or bell-off "Paused") and the relative time. Long-press a card for Pause/Resume reminder and Delete; there are no per-card buttons.
+- **Filters:** pills **All · Reminders** under the header (regular notes only). A **Private** pill exists but is **invisible until unlocked**.
+- **Unlocking (the "knock"):** tap New, type the PIN as the note's entire text, Save. Nothing is saved; Private appears and opens. It locks (and the pill disappears) when you tap All/Reminders or Lock, after 60 s (`PRIVATE_OPEN_MS`), or when the app goes to the background. A wrong code just saves as a normal note, so nothing hints that Private exists. Consequence: a new note whose whole text equals the PIN can't be saved as a regular note.
+- **Making private notes:** while Private is open, New makes a private note. The editor's Regular/Private switch only shows while Private is open, or before any PIN exists (choosing Private then sets the PIN).
 - **Reminders:** optional per regular note — every N days, either once at a set time or N times a day **spread evenly** across a From–Until window with both ends included (`Occurrences.evenSlots`; 7:00–22:00 × 5 → 7:00, 10:45, 14:30, 18:15, 22:00; the editor previews the exact times), any strictness (default Gentle), with Pause/Resume on the card (`ReminderConfig.isPaused`). Occurrence key `note:<id>:<epochDay>`; `Occurrences.generateNoteReminders` creates the window and `Engine.advanceNoteReminder` fires one and rolls `nextReminderEpochDay` forward. A day stuck in the past rolls itself forward on the next schedule computation, and the editor starts new reminders on the next future slot (a past slot would be dropped as late and never start). Deleting the note removes its reminder.
-- **List vs editor:** the list clamps content to one line with an ellipsis; the editor shows it in full.
+- **List vs editor:** cards clamp the text (3-line title, 7-line body); the full-screen editor shows it all.
 
 ### Data (Room, `app/schemas/` exported)
 
@@ -170,7 +173,7 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
 - **Nudge cooldown:** the "10-minute per-app cooldown" was replaced by "nudge on every real open, plus Still-here check-ins".
 - **Message tone:** gentle messages were replaced by ruthless ones (custom messages kept). The card says "REALITY CHECK" with **Stay anyway** (quiet) and **Get me out** (bold).
 - **History:** "no history in v1" was replaced by the Stats tab.
-- **Notes:** secret notes exist but are **hidden** — no visible "Secret Notes" section; a lock glyph in the header switches between the regular list and the secrets-alone view, re-locking after 60 s. Secrets can't have reminders. No PIN recovery.
+- **Notes:** private (secret) notes were first **hidden** behind a header lock glyph that re-locked after 60 s. On 2026-10-10 the user disliked that. After briefly trying a visible Private filter, they chose the "knock": Private stays invisible and opens when a new note containing exactly the PIN is saved; it closes on going back to normal notes or after 1 minute. Private notes can't have reminders. No PIN recovery.
 - **Navigation:** 6 bottom tabs → **4** (Reminders merges Plan + Recurring behind a segmented control; Setup lives behind a gear in every `ScreenHeader`).
 
 ## History (what was built, in order)
@@ -201,5 +204,6 @@ ui/                  Screens: Reminders (Plan + Recurring behind a segmented con
     - day-chip strip on the Plan tab; 12-hour times in Notes; quieter Nudge and Stats screens
     - Takeover split into a red alarm and a yellow sticky note, previewable from Setup
 15. **Editors + sound round:** full-screen editors with steppers; scroll-wheel time picker; custom alarm sound for Takeover and Nagging; note "several times a day" spread evenly instead of at random times.
+16. **Notes redesign:** staggered card grid, All / Reminders filters, long-press menu instead of per-row buttons; Private is hidden and opened by saving the PIN as a new note.
 
 **Not yet done:** the reboot test (a Sticky surviving a restart) was never run on the phone, and there's been no 24-hour reliability run with the log pulled afterwards.
